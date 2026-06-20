@@ -1,0 +1,79 @@
+<div id="review-panel" class="space-y-6">
+  {% set o = lead.outreach %}
+  {% if lead.status != 'done' or not o %}
+    <div class="card p-6 text-center text-slate-400">
+      {% if lead.status == 'failed' %}
+        <p class="text-rose-400">Processing failed.</p>
+        <p class="text-xs mt-2">{{ lead.error }}</p>
+      {% else %}
+        <p>Outreach not generated yet ({{ lead.status }}).</p>
+      {% endif %}
+      <button class="mt-4 bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm"
+              hx-post="/leads/{{ lead.id }}/regenerate"
+              hx-target="#review-panel" hx-swap="outerHTML"
+              hx-indicator="#regen-spin">
+        Generate now <span id="regen-spin" class="htmx-indicator">…</span>
+      </button>
+    </div>
+  {% else %}
+    <!-- quality score -->
+    <div class="card p-6 flex items-center justify-between">
+      <div>
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Quality score</div>
+        <div class="text-4xl font-bold {{ 'text-emerald-400' if o.quality_score>=8 else 'text-amber-400' }}">
+          {{ '%.1f'|format(o.quality_score or 0) }}<span class="text-lg text-slate-500">/10</span>
+        </div>
+      </div>
+      <div>
+        <span class="text-xs px-2 py-1 rounded
+          {% if o.review_status=='approved' %}bg-emerald-900 text-emerald-300
+          {% elif o.review_status=='edited' %}bg-sky-900 text-sky-300
+          {% else %}bg-slate-700 text-slate-300{% endif %}">{{ o.review_status }}</span>
+      </div>
+    </div>
+
+    {% if o.qa_feedback %}
+    <div class="card p-4 text-xs text-slate-400">
+      <div class="flex flex-wrap gap-3 mb-2">
+        {% for k in ['mentions_company','mentions_role','relevant','grammar_ok','professional_tone'] %}
+        <span>{{ '✅' if o.qa_feedback.get(k) else '❌' }} {{ k.replace('_',' ') }}</span>
+        {% endfor %}
+        <span>{{ '⚠️ generic' if o.qa_feedback.get('generic') else '✅ specific' }}</span>
+      </div>
+      <p class="text-slate-300">{{ o.qa_feedback.get('feedback','') }}</p>
+    </div>
+    {% endif %}
+
+    <!-- editable outreach -->
+    <form class="card p-6 space-y-4" hx-post="/leads/{{ lead.id }}/edit"
+          hx-target="#review-panel" hx-swap="outerHTML">
+      <div>
+        <label class="text-xs text-slate-400">Email subject</label>
+        <input name="email_subject" value="{{ o.email_subject or '' }}"
+               class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">Email body</label>
+        <textarea name="email_body" rows="9"
+          class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">{{ o.email_body or '' }}</textarea>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">WhatsApp message</label>
+        <textarea name="whatsapp_body" rows="4"
+          class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">{{ o.whatsapp_body or '' }}</textarea>
+      </div>
+      <div class="flex gap-2">
+        <button class="bg-sky-700 hover:bg-sky-600 px-4 py-2 rounded-lg text-sm">Save edits</button>
+        <button type="button" class="bg-emerald-700 hover:bg-emerald-600 px-4 py-2 rounded-lg text-sm"
+                hx-post="/leads/{{ lead.id }}/approve" hx-target="#review-panel" hx-swap="outerHTML">
+          Approve
+        </button>
+        <button type="button" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm"
+                hx-post="/leads/{{ lead.id }}/regenerate" hx-target="#review-panel" hx-swap="outerHTML"
+                hx-indicator="#regen-spin">
+          Regenerate <span id="regen-spin" class="htmx-indicator">…</span>
+        </button>
+      </div>
+    </form>
+  {% endif %}
+</div>
