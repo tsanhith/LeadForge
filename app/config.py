@@ -50,18 +50,20 @@ def get_settings() -> Settings:
 # generation tasks so the review is a genuine second opinion.
 # --------------------------------------------------------------------------------------
 MODEL_ROUTES: dict[str, tuple[str, str]] = {
+    # Fast/cheap model for the extraction-style stages.
     "research": ("nvidia_nim", "meta/llama-3.1-8b-instruct"),
     "role": ("nvidia_nim", "meta/llama-3.1-8b-instruct"),
-    "opportunity": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    "personalize": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    "email": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    "whatsapp": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    # QA reviews everyone else's work -> route to a different family/provider.
-    "qa": ("nvidia_nim", "qwen/qwen2.5-7b-instruct"),
+    # Strong model for the reasoning + writing stages.
+    "opportunity": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    "personalize": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    "email": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    "whatsapp": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    # QA reviews everyone else's work -> route to a DIFFERENT model family (Qwen).
+    "qa": ("nvidia_nim", "qwen/qwen3-next-80b-a3b-instruct"),
 }
 
 # Default route used if a task name is missing from MODEL_ROUTES.
-DEFAULT_ROUTE: tuple[str, str] = ("openrouter", "meta-llama/llama-3.3-70b-instruct:free")
+DEFAULT_ROUTE: tuple[str, str] = ("nvidia_nim", "meta/llama-3.3-70b-instruct")
 
 
 # --------------------------------------------------------------------------------------
