@@ -32,13 +32,19 @@ class FakeProvider:
         return ChatResult(text='{"ok": true}', model=model, provider=self.name)
 
 
+def _route_to(monkeypatch, provider):
+    """Pin route resolution so tests don't depend on the live MODEL_ROUTES config."""
+    monkeypatch.setattr(gateway.routes, "resolve", lambda task: (provider, "test-model"))
+
+
 @pytest.mark.asyncio
 async def test_complete_uses_primary(monkeypatch):
     primary = FakeProvider("openrouter")
     secondary = FakeProvider("nvidia_nim")
     monkeypatch.setattr(gateway, "get_providers", lambda: {"openrouter": primary, "nvidia_nim": secondary})
+    _route_to(monkeypatch, "openrouter")
 
-    resp = await gateway.complete("email", [{"role": "user", "content": "hi"}])
+    resp = await gateway.complete("anytask", [{"role": "user", "content": "hi"}])
     assert resp.provider == "openrouter"
     assert resp.json() == {"ok": True}
     assert primary.calls == 1
@@ -50,9 +56,10 @@ async def test_complete_falls_back(monkeypatch):
     primary = FakeProvider("openrouter", fail=True)
     secondary = FakeProvider("nvidia_nim")
     monkeypatch.setattr(gateway, "get_providers", lambda: {"openrouter": primary, "nvidia_nim": secondary})
+    _route_to(monkeypatch, "openrouter")
 
-    # 'email' routes to openrouter; it fails -> should fall back to nvidia_nim.
-    resp = await gateway.complete("email", [{"role": "user", "content": "hi"}])
+    # primary (openrouter) fails -> should fall back to nvidia_nim.
+    resp = await gateway.complete("anytask", [{"role": "user", "content": "hi"}])
     assert resp.provider == "nvidia_nim"
     assert secondary.calls == 1
 
@@ -62,6 +69,7 @@ async def test_complete_all_fail_raises(monkeypatch):
     primary = FakeProvider("openrouter", fail=True)
     secondary = FakeProvider("nvidia_nim", fail=True)
     monkeypatch.setattr(gateway, "get_providers", lambda: {"openrouter": primary, "nvidia_nim": secondary})
+    _route_to(monkeypatch, "openrouter")
 
     with pytest.raises(ProviderError):
-        await gateway.complete("email", [{"role": "user", "content": "hi"}])
+        await gateway.complete("anytask", [{"role": "user", "content": "hi"}])
