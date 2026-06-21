@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · LeadForge</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body { background:#0b1020; color:#e5e7eb; } .card { background:#151b2e; border:1px solid #233; border-radius:0.75rem; }</style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+  <div class="card p-8 w-full max-w-sm">
+    <div class="text-2xl font-bold tracking-tight mb-1">⚡ Lead<span class="text-indigo-400">Forge</span></div>
+    <p class="text-sm text-slate-400 mb-6">Sign in to continue.</p>
+    {% if error %}
+    <div class="mb-4 text-sm text-rose-400 bg-rose-950/40 border border-rose-900 rounded-lg px-3 py-2">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login" class="space-y-4">
+      <div>
+        <label class="text-xs text-slate-400">Email</label>
+        <input name="email" type="email" required autofocus
+               class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">Password</label>
+        <input name="password" type="password" required
+               class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <button class="w-full bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm font-medium">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>

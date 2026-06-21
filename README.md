@@ -62,6 +62,10 @@ Set in `.env`:
 
 - `OPENROUTER_API_KEY` — https://openrouter.ai/keys
 - `NVIDIA_NIM_API_KEY` — https://build.nvidia.com
+- `SESSION_SECRET` — signs the login cookie (`python -c "import secrets;print(secrets.token_hex(32))"`)
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — the first admin, created automatically on first run
+
+The app requires sign-in; open http://localhost:8000 and log in with the admin above.
 
 ## Run
 
@@ -98,6 +102,10 @@ Covers header mapping, validation/dedupe, the JSON parser, and gateway routing +
 | `WHATSAPP_PROVIDER` | `console` (mock) · `meta`. Token + phone-number-id in `.env`. |
 | `REQUIRE_OPT_IN_FOR_WHATSAPP` | block WhatsApp sends to non-opted-in leads (default on). |
 | `PUBLIC_BASE_URL` / `COMPANY_POSTAL_ADDRESS` | used to build the email unsubscribe footer. |
+| `SESSION_SECRET` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | login cookie secret + first admin. |
+| `WEBHOOK_SECRET` | if set, `/webhooks/*` require it (query `?secret=` or `X-Webhook-Secret`). |
+| `QUEUE_BACKEND` | `inprocess` (default, DB-recovery on restart) or `arq` (Redis, scales out). |
+| `REDIS_URL` | Redis DSN for the `arq` backend. |
 
 ## Project layout
 
@@ -107,11 +115,12 @@ app/
   llm/                 gateway + providers (the only place models are chosen)
   ingest/              excel parse, column mapping, validation
   scraping/            website fetch + HTML→text
-  agents/              7 task agents (each calls only the gateway)
-  pipeline/            orchestrator (per lead) + in-process worker (per job)
+  agents/              8 task agents (each calls only the gateway)
+  auth/                users, password hashing, session gate middleware
+  pipeline/            orchestrator + worker + queue abstraction (inprocess|arq) + recovery
   channels/            email + whatsapp senders, suppression (one send_* interface)
-  web/                 routes + Jinja2/HTMX templates
-  models.py db.py schemas.py job_service.py send_service.py
+  web/                 routes + auth routes + Jinja2/HTMX templates
+  models.py db.py schemas.py job_service.py send_service.py sequences.py
 tests/                 unit tests
 scripts/               make_sample.py · run_demo.py · e2e_one.py (one-lead live run)
 ```
@@ -123,7 +132,18 @@ scripts/               make_sample.py · run_demo.py · e2e_one.py (one-lead liv
 - **WhatsApp:** set `WHATSAPP_PROVIDER=meta`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, and a
   pre-approved `WHATSAPP_TEMPLATE_NAME` for cold first-contact.
 
+## Horizontal scaling (optional)
+
+The default `inprocess` queue resumes interrupted jobs on restart (state lives in the DB).
+To scale across machines, set `QUEUE_BACKEND=arq`, run Redis, `pip install arq`, and start one
+or more worker processes:
+
+```bash
+arq app.pipeline.arq_worker.WorkerSettings
+```
+
 ## Not yet built
 
-Multi-user auth, Redis/Celery durable queue, follow-up sequences, rate limiting/observability,
-and the sending-domain infra (SPF/DKIM/DMARC, warm-up) above.
+Results/quality loop (open/reply/meeting tracking → prompt tuning, A/B subject lines) and
+CRM/enrichment push-pull (HubSpot/Salesforce/Apollo). Plus sending-domain infra
+(SPF/DKIM/DMARC, warm-up).
