@@ -34,6 +34,58 @@ class Settings(BaseSettings):
     request_timeout: float = 60.0
     max_retries: int = 2
 
+    # ---- Outreach: email channel ----
+    # Provider stays "console" (logs the email, marks it sent) until real credentials land,
+    # so the whole pipeline is exercisable end-to-end today. Switch to smtp/resend in .env.
+    email_provider: str = "console"  # console|smtp|resend
+    email_from: str = "outreach@leadforge.ai"
+    email_from_name: str = "LeadForge AI"
+    email_reply_to: str = ""
+
+    # SMTP — for the "official mail" (Google Workspace / Microsoft 365 / any SMTP relay).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+
+    # Resend (https://resend.com) transactional API — alternative to SMTP.
+    resend_api_key: str = ""
+
+    # ---- Outreach: WhatsApp channel (Meta WhatsApp Business Cloud API) ----
+    whatsapp_provider: str = "console"  # console|meta
+    whatsapp_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_api_version: str = "v21.0"
+    # Meta requires a pre-approved template for the FIRST message to a contact. If set, the
+    # generated copy is passed as body parameter {{1}}; otherwise a plain text message is sent
+    # (only valid inside the 24h customer-service window).
+    whatsapp_template_name: str = ""
+    whatsapp_template_lang: str = "en_US"
+
+    # ---- Bulk sending / throttle ----
+    # Drip rate so a cold blast doesn't torch the sending domain's reputation. Sends are
+    # queued (send_status='queued') and a background worker releases them at this pace,
+    # within the send window, with random jitter so the cadence looks human.
+    send_rate_per_hour: int = 30
+    send_jitter: float = 0.3            # +/- fraction applied to the gap between sends
+    send_window_start_hour: int = 0     # local-time send window [start, end); 0..24 = always
+    send_window_end_hour: int = 24
+
+    # ---- Follow-up sequences ----
+    sequences_enabled: bool = True  # auto-enroll leads after the first message is sent
+
+    # ---- Compliance / public surface ----
+    public_base_url: str = "http://localhost:8000"  # used to build the unsubscribe link
+    company_postal_address: str = "LeadForge AI"     # CAN-SPAM requires a physical address
+    require_opt_in_for_whatsapp: bool = True
+
+    @property
+    def send_interval_seconds(self) -> float:
+        """Base gap between releases, derived from the hourly rate (jitter applied later)."""
+        rate = max(self.send_rate_per_hour, 1)
+        return 3600.0 / rate
+
     @property
     def fallback_order(self) -> list[str]:
         return [p.strip() for p in self.llm_fallback_order.split(",") if p.strip()]
@@ -50,18 +102,22 @@ def get_settings() -> Settings:
 # generation tasks so the review is a genuine second opinion.
 # --------------------------------------------------------------------------------------
 MODEL_ROUTES: dict[str, tuple[str, str]] = {
+    # Fast/cheap model for the extraction-style stages.
     "research": ("nvidia_nim", "meta/llama-3.1-8b-instruct"),
     "role": ("nvidia_nim", "meta/llama-3.1-8b-instruct"),
-    "opportunity": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    "personalize": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    "email": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    "whatsapp": ("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    # QA reviews everyone else's work -> route to a different family/provider.
-    "qa": ("nvidia_nim", "qwen/qwen2.5-7b-instruct"),
+    # Strong model for the reasoning + writing stages.
+    "opportunity": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    "personalize": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    "email": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    "whatsapp": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
+    # QA reviews everyone else's work -> route to a DIFFERENT model family (Qwen).
+    "qa": ("nvidia_nim", "qwen/qwen3-next-80b-a3b-instruct"),
+    # Short follow-up nudges — same strong writer as the initial email.
+    "followup": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
 }
 
 # Default route used if a task name is missing from MODEL_ROUTES.
-DEFAULT_ROUTE: tuple[str, str] = ("openrouter", "meta-llama/llama-3.3-70b-instruct:free")
+DEFAULT_ROUTE: tuple[str, str] = ("nvidia_nim", "meta/llama-3.3-70b-instruct")
 
 
 # --------------------------------------------------------------------------------------
@@ -81,5 +137,43 @@ COMPANY_PROFILE: dict[str, object] = {
         "Cut manual, repetitive internal work",
         "Faster operations through automation",
         "Bespoke AI — not off-the-shelf templates",
+    ],
+}
+
+
+# --------------------------------------------------------------------------------------
+# Default follow-up sequence, seeded into the DB on first run. Steps fire *after* the
+# initial outreach; ``delay_days`` is measured from the previous touch. ``generate`` asks the
+# follow-up agent to write the copy; the templates are the fallback (and what tests use).
+# Placeholders: {first_name} {name} {company}.
+# --------------------------------------------------------------------------------------
+DEFAULT_SEQUENCE: dict[str, object] = {
+    "name": "Default 3-step follow-up",
+    "steps": [
+        {
+            "step_order": 1, "channel": "email", "delay_days": 3, "generate": True,
+            "subject_template": "Re: {company}",
+            "body_template": (
+                "Hi {first_name}, floating my note back to the top of your inbox in case it "
+                "got buried. Worth a quick chat about {company}? Happy to share a concrete "
+                "example."
+            ),
+        },
+        {
+            "step_order": 2, "channel": "whatsapp", "delay_days": 5, "generate": True,
+            "subject_template": None,
+            "body_template": (
+                "Hi {first_name}, did my note about {company} reach you? Glad to send a short "
+                "example if it's useful."
+            ),
+        },
+        {
+            "step_order": 3, "channel": "email", "delay_days": 6, "generate": True,
+            "subject_template": "Closing the loop — {company}",
+            "body_template": (
+                "Hi {first_name}, I'll assume the timing isn't right and won't keep emailing. "
+                "If it ever is, just reply here. Thanks for your time!"
+            ),
+        },
     ],
 }

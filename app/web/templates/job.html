@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ job.id }} · LeadForge{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/" class="text-sm text-indigo-400">&larr; All uploads</a>
+  <div class="flex items-center gap-3 mt-2">
+    <h1 class="text-2xl font-bold font-mono">{{ job.id }}</h1>
+    <span class="text-slate-400">{{ job.source_filename }}</span>
+  </div>
+</div>
+
+{% include "partials/lead_table.html" %}
+{% endblock %}

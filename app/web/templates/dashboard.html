@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid md:grid-cols-2 gap-6 mb-8">
+  <div class="card p-6">
+    <h2 class="text-lg font-semibold mb-4">Upload leads</h2>
+    <form action="/upload" method="post" enctype="multipart/form-data" class="space-y-4">
+      <input type="file" name="file" accept=".xlsx,.xls,.csv" required
+             class="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4
+                    file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white
+                    hover:file:bg-indigo-500 cursor-pointer">
+      <p class="text-xs text-slate-400">
+        Apollo / ZoomInfo / Sales Navigator exports (.xlsx or .csv). Columns are auto-mapped.
+      </p>
+      <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-medium">
+        Upload &amp; process
+      </button>
+    </form>
+  </div>
+  <div class="card p-6">
+    <h2 class="text-lg font-semibold mb-4">Totals</h2>
+    <div class="grid grid-cols-2 gap-4">
+      <div><div class="text-3xl font-bold">{{ totals.jobs }}</div><div class="text-xs text-slate-400">Uploads</div></div>
+      <div><div class="text-3xl font-bold">{{ totals.leads }}</div><div class="text-xs text-slate-400">Leads</div></div>
+      <div><div class="text-3xl font-bold text-emerald-400">{{ totals.high_quality }}</div><div class="text-xs text-slate-400">High quality</div></div>
+      <div><div class="text-3xl font-bold text-amber-400">{{ totals.needs_review }}</div><div class="text-xs text-slate-400">Needs review</div></div>
+    </div>
+  </div>
+</div>
+
+<h2 class="text-lg font-semibold mb-3">Upload history</h2>
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-[#1b2237] text-slate-400 text-left">
+      <tr>
+        <th class="px-4 py-3">Job</th><th class="px-4 py-3">File</th>
+        <th class="px-4 py-3">Status</th><th class="px-4 py-3">Leads</th>
+        <th class="px-4 py-3">High</th><th class="px-4 py-3">Review</th>
+        <th class="px-4 py-3">Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr class="border-t border-slate-800 hover:bg-[#1a2138] cursor-pointer"
+          onclick="window.location='/jobs/{{ job.id }}'">
+        <td class="px-4 py-3 font-mono text-indigo-300">{{ job.id }}</td>
+        <td class="px-4 py-3">{{ job.source_filename }}</td>
+        <td class="px-4 py-3">
+          <span class="px-2 py-0.5 rounded text-xs
+            {{ 'bg-emerald-900 text-emerald-300' if job.status=='done' else 'bg-amber-900 text-amber-300' }}">
+            {{ job.status }}</span>
+        </td>
+        <td class="px-4 py-3">{{ job.total }}</td>
+        <td class="px-4 py-3 text-emerald-400">{{ job.high_quality }}</td>
+        <td class="px-4 py-3 text-amber-400">{{ job.needs_review }}</td>
+        <td class="px-4 py-3 text-slate-400">{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No uploads yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

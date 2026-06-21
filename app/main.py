@@ -1,0 +1,31 @@
+"""FastAPI application entry point."""
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from app.db import init_db
+from app.pipeline.worker import start_worker
+from app.send_worker import start_send_worker
+from app.sequence_worker import start_sequence_worker
+from app.web.routes import router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    start_worker()
+    start_send_worker()
+    start_sequence_worker()
+    yield
+
+
+app = FastAPI(title="LeadForge", lifespan=lifespan)
+app.include_router(router)

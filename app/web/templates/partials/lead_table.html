@@ -1,0 +1,122 @@
+<div id="job-body"
+     {% if job.status != 'done' or queued_count|default(0) %}hx-get="/jobs/{{ job.id }}/leads?{{ request.url.query }}"
+     hx-trigger="load delay:3s" hx-target="#job-body" hx-swap="outerHTML"{% endif %}>
+
+  <!-- stat cards -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    <div class="card p-4"><div class="text-2xl font-bold">{{ job.total }}</div><div class="text-xs text-slate-400">Uploaded</div></div>
+    <div class="card p-4"><div class="text-2xl font-bold">{{ job.processed }}</div><div class="text-xs text-slate-400">Processed</div></div>
+    <div class="card p-4"><div class="text-2xl font-bold text-emerald-400">{{ job.high_quality }}</div><div class="text-xs text-slate-400">High quality</div></div>
+    <div class="card p-4"><div class="text-2xl font-bold text-amber-400">{{ job.needs_review }}</div><div class="text-xs text-slate-400">Needs review</div></div>
+    <div class="card p-4"><div class="text-2xl font-bold text-slate-400">{{ job.invalid }}</div><div class="text-xs text-slate-400">Invalid rows</div></div>
+  </div>
+
+  <!-- search + filters -->
+  <form class="flex flex-wrap gap-2 mb-4" hx-get="/jobs/{{ job.id }}/leads"
+        hx-target="#job-body" hx-swap="outerHTML" hx-trigger="submit, change from:select">
+    <input name="q" value="{{ params.get('q','') }}" placeholder="Search name / company / industry / role"
+           class="flex-1 min-w-[220px] bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm">
+    <input name="industry" value="{{ params.get('industry','') }}" placeholder="Industry"
+           class="bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm w-32">
+    <input name="position" value="{{ params.get('position','') }}" placeholder="Role e.g. CTO"
+           class="bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm w-32">
+    <select name="min_score" class="bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm">
+      <option value="">Any score</option>
+      {% for s in [6,7,8,9] %}
+      <option value="{{ s }}" {{ 'selected' if params.get('min_score')== s|string }}>Score &ge; {{ s }}</option>
+      {% endfor %}
+    </select>
+    <select name="review_status" class="bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm">
+      <option value="">Any status</option>
+      {% for st in ['pending','approved','edited'] %}
+      <option value="{{ st }}" {{ 'selected' if params.get('review_status')==st }}>{{ st }}</option>
+      {% endfor %}
+    </select>
+    <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm">Search</button>
+    <a href="/jobs/{{ job.id }}/export.csv{% if request.url.query %}?{{ request.url.query }}{% endif %}"
+       class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm">Export CSV</a>
+  </form>
+
+  <!-- bulk actions -->
+  <div class="card p-4 mb-4 flex flex-wrap items-center gap-2">
+    <span class="text-xs text-slate-400 mr-1">Bulk:</span>
+    <div class="flex items-center gap-1">
+      <span class="text-xs text-slate-400">Approve all with score ≥</span>
+      <input form="bulk-approve" name="min_score" value="8" type="number" step="0.5" min="0" max="10"
+             class="w-16 bg-[#0d1326] border border-slate-700 rounded-lg px-2 py-1 text-sm">
+      <button form="bulk-approve"
+              class="bg-emerald-700 hover:bg-emerald-600 px-3 py-1.5 rounded-lg text-sm">Approve</button>
+    </div>
+    <form id="bulk-approve" hx-post="/jobs/{{ job.id }}/bulk-approve"
+          hx-target="#job-body" hx-swap="outerHTML" class="hidden"></form>
+
+    <span class="text-slate-700">|</span>
+    <button class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-sm"
+            hx-post="/jobs/{{ job.id }}/bulk-send" hx-vals='{"channel":"email"}'
+            hx-target="#job-body" hx-swap="outerHTML"
+            hx-confirm="Queue all approved leads for email sending (throttled)?">
+      Send approved · Email
+    </button>
+    <button class="bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded-lg text-sm"
+            hx-post="/jobs/{{ job.id }}/bulk-send" hx-vals='{"channel":"whatsapp"}'
+            hx-target="#job-body" hx-swap="outerHTML"
+            hx-confirm="Queue all approved & opted-in leads for WhatsApp (throttled)?">
+      Send approved · WhatsApp
+    </button>
+
+    {% if queued_count|default(0) %}
+    <span class="ml-auto text-xs px-2 py-1 rounded bg-sky-900 text-sky-300">
+      {{ queued_count }} queued · sending ~{{ settings.send_rate_per_hour }}/hr
+    </span>
+    {% endif %}
+  </div>
+
+  <div class="card overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-[#1b2237] text-slate-400 text-left">
+        <tr>
+          <th class="px-4 py-3">Name</th><th class="px-4 py-3">Role</th>
+          <th class="px-4 py-3">Company</th><th class="px-4 py-3">Industry</th>
+          <th class="px-4 py-3">Status</th><th class="px-4 py-3">Score</th>
+          <th class="px-4 py-3">Review</th><th class="px-4 py-3">Sent</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads %}
+        <tr class="border-t border-slate-800 hover:bg-[#1a2138] cursor-pointer"
+            onclick="window.location='/leads/{{ lead.id }}'">
+          <td class="px-4 py-3 font-medium">{{ lead.name or '—' }}</td>
+          <td class="px-4 py-3">{{ lead.position or '—' }}</td>
+          <td class="px-4 py-3">{{ lead.company or '—' }}</td>
+          <td class="px-4 py-3 text-slate-400">{{ lead.industry or '—' }}</td>
+          <td class="px-4 py-3">
+            <span class="text-xs px-2 py-0.5 rounded
+              {% if lead.status=='done' %}bg-emerald-900 text-emerald-300
+              {% elif lead.status=='failed' %}bg-rose-900 text-rose-300
+              {% elif lead.status=='processing' %}bg-sky-900 text-sky-300
+              {% else %}bg-slate-700 text-slate-300{% endif %}">{{ lead.status }}</span>
+          </td>
+          <td class="px-4 py-3">
+            {% if lead.outreach and lead.outreach.quality_score is not none %}
+              {% set sc = lead.outreach.quality_score %}
+              <span class="{{ 'text-emerald-400' if sc>=settings.quality_threshold else 'text-amber-400' }}">
+                {{ '%.1f'|format(sc) }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-3 text-slate-400">
+            {{ lead.outreach.review_status if lead.outreach else '—' }}
+          </td>
+          <td class="px-4 py-3 text-xs">
+            {% if lead.outreach %}
+              <span title="email" class="{{ 'text-emerald-400' if lead.outreach.send_status=='sent' else 'text-slate-500' }}">✉ {{ lead.outreach.send_status }}</span>
+              {% if lead.outreach.wa_send_status=='sent' %}<span title="whatsapp" class="text-emerald-400 ml-1">WA</span>{% endif %}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="px-4 py-8 text-center text-slate-500">No leads match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

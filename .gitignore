@@ -8,3 +8,4 @@ uploads/
 .pytest_cache/
 .DS_Store
 sample_leads.xlsx
+demo_leads.xlsx

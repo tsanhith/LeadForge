@@ -48,6 +48,11 @@ class WhatsAppContent(BaseModel):
     message: str = ""
 
 
+class FollowUpContent(BaseModel):
+    subject: str = ""   # ignored for WhatsApp
+    message: str = ""
+
+
 class QAReview(BaseModel):
     quality_score: float = 0.0
     mentions_company: bool = False
