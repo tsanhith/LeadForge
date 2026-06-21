@@ -44,13 +44,17 @@ More restricted than email (Meta policy).
 - **Scheduler** in the worker — timezone-aware send windows, per-account rate limiting.
 - **Reply detection** (inbound webhook) → auto-pause the sequence for that lead.
 
-## Phase 4 — Production hardening
-- **Auth + users/roles** — the app is currently open to anyone with the URL.
-- **Durable queue** — replace the in-process asyncio worker with Redis + Celery/RQ
-  (survives restarts, scales horizontally).
-- **CRM / enrichment** — push to HubSpot/Salesforce; pull from Apollo/Lusha/ZoomInfo when a
-  website is thin or missing.
-- **Reliability** — per-lead audit log, retries with backoff, structured logging/metrics.
+## Phase 4 — Production hardening  ◑ (auth + queue done)
+- ✅ **Auth + users/roles** — session-cookie login (PBKDF2 hashing), admin/member roles, a
+  gate middleware over the whole app, first-admin seeding, and a `WEBHOOK_SECRET` for the
+  public webhook endpoints. User management at `/users`.
+- ✅ **Durable queue** — pluggable backend: `inprocess` (default; resumes interrupted jobs
+  on restart via DB recovery) or `arq` (Redis-backed, scales horizontally — run
+  `arq app.pipeline.arq_worker.WorkerSettings`).
+- **CRM / enrichment** (todo) — push to HubSpot/Salesforce; pull from Apollo/Lusha/ZoomInfo
+  when a website is thin or missing.
+- **Reliability** (partial) — structured logging in place; still want a per-lead audit log,
+  retries with backoff, and metrics.
 
 ## Phase 5 — Results & quality loop
 - Track **open / reply / meeting-booked** per outreach angle.

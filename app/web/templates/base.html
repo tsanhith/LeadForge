@@ -20,6 +20,14 @@
       <nav class="flex items-center gap-4 text-sm text-slate-400">
         <a href="/" class="hover:text-slate-200">Uploads</a>
         <a href="/sequences" class="hover:text-slate-200">Sequences</a>
+        {% if request.session.get('user_role') == 'admin' %}
+        <a href="/users" class="hover:text-slate-200">Users</a>
+        {% endif %}
+        {% if request.session.get('user_email') %}
+        <span class="text-slate-600">|</span>
+        <span class="text-slate-500">{{ request.session.get('user_email') }}</span>
+        <a href="/logout" class="hover:text-slate-200">Sign out</a>
+        {% endif %}
       </nav>
     </div>
   </header>

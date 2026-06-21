@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hmac
 import html
 import io
 import os
@@ -21,7 +22,7 @@ from app.db import get_session
 from app.job_service import create_job
 from app.models import Enrollment, Job, Lead, Outreach, Sequence
 from app.pipeline.orchestrator import process_lead
-from app.pipeline.worker import enqueue_job
+from app.pipeline.queue import enqueue_job
 from app import sequences
 from app.send_service import (
     bulk_approve,
@@ -83,7 +84,7 @@ async def upload(
     job = await create_job(
         session, file_path=str(dest), filename=file.filename or dest.name
     )
-    enqueue_job(job.id)
+    await enqueue_job(job.id)
     return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
 
 
@@ -367,8 +368,19 @@ async def unsubscribe(email: str = "", session: AsyncSession = Depends(get_sessi
 
 
 # ------------------------------------------------------------------ inbound webhooks
+def _webhook_authorized(request: Request) -> bool:
+    """If WEBHOOK_SECRET is set, require it via ?secret= or the X-Webhook-Secret header."""
+    secret = get_settings().webhook_secret
+    if not secret:
+        return True
+    provided = request.query_params.get("secret") or request.headers.get("X-Webhook-Secret")
+    return hmac.compare_digest(provided or "", secret)
+
+
 @router.post("/webhooks/email")
 async def webhook_email(request: Request, session: AsyncSession = Depends(get_session)):
+    if not _webhook_authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     """Receive delivery events from the email provider (bounce / complaint / reply).
 
     Tolerant of shapes: accepts a single object or a list, and looks for the address under
@@ -401,6 +413,8 @@ async def webhook_whatsapp(request: Request, session: AsyncSession = Depends(get
 
     Maps a ``failed`` delivery status to ``bounced`` and an inbound message to ``replied``.
     """
+    if not _webhook_authorized(request):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     try:
         payload = await request.json()
     except Exception:  # noqa: BLE001

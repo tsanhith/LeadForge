@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./leadforge.db"
     upload_dir: str = "./uploads"
 
+    # ---- Auth ----
+    session_secret: str = "dev-insecure-change-me"  # signs the session cookie; set in prod
+    admin_email: str = ""        # seeds the first admin if no users exist yet
+    admin_password: str = ""
+    webhook_secret: str = ""     # if set, /webhooks/* require ?secret= or X-Webhook-Secret
+
+    # ---- Job queue ----
+    # inprocess: the built-in asyncio worker (default; durable across restarts via DB
+    # recovery). arq: a Redis-backed durable queue that scales horizontally (needs REDIS_URL
+    # and a separate `arq app.pipeline.arq_worker.WorkerSettings` process).
+    queue_backend: str = "inprocess"  # inprocess|arq
+    redis_url: str = "redis://localhost:6379"
+
     request_timeout: float = 60.0
     max_retries: int = 2
 
