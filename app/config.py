@@ -63,10 +63,25 @@ class Settings(BaseSettings):
     whatsapp_template_name: str = ""
     whatsapp_template_lang: str = "en_US"
 
+    # ---- Bulk sending / throttle ----
+    # Drip rate so a cold blast doesn't torch the sending domain's reputation. Sends are
+    # queued (send_status='queued') and a background worker releases them at this pace,
+    # within the send window, with random jitter so the cadence looks human.
+    send_rate_per_hour: int = 30
+    send_jitter: float = 0.3            # +/- fraction applied to the gap between sends
+    send_window_start_hour: int = 0     # local-time send window [start, end); 0..24 = always
+    send_window_end_hour: int = 24
+
     # ---- Compliance / public surface ----
     public_base_url: str = "http://localhost:8000"  # used to build the unsubscribe link
     company_postal_address: str = "LeadForge AI"     # CAN-SPAM requires a physical address
     require_opt_in_for_whatsapp: bool = True
+
+    @property
+    def send_interval_seconds(self) -> float:
+        """Base gap between releases, derived from the hourly rate (jitter applied later)."""
+        rate = max(self.send_rate_per_hour, 1)
+        return 3600.0 / rate
 
     @property
     def fallback_order(self) -> list[str]:

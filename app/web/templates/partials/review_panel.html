@@ -80,9 +80,10 @@
     {% set reviewed = o.review_status in ['approved','edited'] %}
     {% macro send_badge(status) %}
       <span class="text-xs px-2 py-0.5 rounded
-        {% if status=='sent' %}bg-emerald-900 text-emerald-300
-        {% elif status=='failed' %}bg-rose-900 text-rose-300
+        {% if status in ['sent','replied'] %}bg-emerald-900 text-emerald-300
+        {% elif status in ['failed','bounced'] %}bg-rose-900 text-rose-300
         {% elif status=='suppressed' %}bg-amber-900 text-amber-300
+        {% elif status=='queued' %}bg-sky-900 text-sky-300
         {% else %}bg-slate-700 text-slate-300{% endif %}">{{ status }}</span>
     {% endmacro %}
     <div class="card p-6 space-y-4">

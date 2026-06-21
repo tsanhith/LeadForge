@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,14 @@ from app.job_service import create_job
 from app.models import Job, Lead, Outreach
 from app.pipeline.orchestrator import process_lead
 from app.pipeline.worker import enqueue_job
-from app.send_service import send_email_for_lead, send_whatsapp_for_lead
+from app.send_service import (
+    bulk_approve,
+    bulk_queue,
+    record_email_event,
+    record_whatsapp_event,
+    send_email_for_lead,
+    send_whatsapp_for_lead,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -95,6 +102,37 @@ def _filter_leads(stmt, params: dict):
     return stmt
 
 
+async def _count_queued(session: AsyncSession, job_id: str) -> int:
+    """How many of this job's messages are waiting in the throttled send queue."""
+    return (
+        await session.execute(
+            select(func.count())
+            .select_from(Outreach)
+            .join(Lead)
+            .where(
+                Lead.job_id == job_id,
+                (Outreach.send_status == "queued") | (Outreach.wa_send_status == "queued"),
+            )
+        )
+    ).scalar_one()
+
+
+async def _table_response(request: Request, session: AsyncSession, job: Job, params: dict):
+    """Render the lead table partial with everything it needs (leads, stats, queue depth)."""
+    leads = await _load_leads(session, job.id, params)
+    return templates.TemplateResponse(
+        request,
+        "partials/lead_table.html",
+        {
+            "job": job,
+            "leads": leads,
+            "params": params,
+            "settings": get_settings(),
+            "queued_count": await _count_queued(session, job.id),
+        },
+    )
+
+
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
 async def job_detail(
     job_id: str, request: Request, session: AsyncSession = Depends(get_session)
@@ -107,7 +145,13 @@ async def job_detail(
     return templates.TemplateResponse(
         request,
         "job.html",
-        {"job": job, "leads": leads, "params": params, "settings": get_settings()},
+        {
+            "job": job,
+            "leads": leads,
+            "params": params,
+            "settings": get_settings(),
+            "queued_count": await _count_queued(session, job_id),
+        },
     )
 
 
@@ -119,13 +163,36 @@ async def job_leads_partial(
     job = await session.get(Job, job_id)
     if job is None:
         return HTMLResponse("Job not found", status_code=404)
-    params = dict(request.query_params)
-    leads = await _load_leads(session, job_id, params)
-    return templates.TemplateResponse(
-        request,
-        "partials/lead_table.html",
-        {"job": job, "leads": leads, "params": params, "settings": get_settings()},
-    )
+    return await _table_response(request, session, job, dict(request.query_params))
+
+
+@router.post("/jobs/{job_id}/bulk-approve", response_class=HTMLResponse)
+async def job_bulk_approve(
+    job_id: str,
+    request: Request,
+    min_score: float = Form(0.0),
+    session: AsyncSession = Depends(get_session),
+):
+    job = await session.get(Job, job_id)
+    if job is None:
+        return HTMLResponse("Job not found", status_code=404)
+    await bulk_approve(session, job_id, min_score)
+    return await _table_response(request, session, job, dict(request.query_params))
+
+
+@router.post("/jobs/{job_id}/bulk-send", response_class=HTMLResponse)
+async def job_bulk_send(
+    job_id: str,
+    request: Request,
+    channel: str = Form("email"),
+    session: AsyncSession = Depends(get_session),
+):
+    job = await session.get(Job, job_id)
+    if job is None:
+        return HTMLResponse("Job not found", status_code=404)
+    channel = "whatsapp" if channel == "whatsapp" else "email"
+    await bulk_queue(session, job_id, channel)
+    return await _table_response(request, session, job, dict(request.query_params))
 
 
 async def _load_leads(session: AsyncSession, job_id: str, params: dict):
@@ -248,6 +315,70 @@ async def unsubscribe(email: str = "", session: AsyncSession = Depends(get_sessi
         + (f"<p style='color:#64748b'>{safe}</p>" if safe else "")
         + "</body>"
     )
+
+
+# ------------------------------------------------------------------ inbound webhooks
+@router.post("/webhooks/email")
+async def webhook_email(request: Request, session: AsyncSession = Depends(get_session)):
+    """Receive delivery events from the email provider (bounce / complaint / reply).
+
+    Tolerant of shapes: accepts a single object or a list, and looks for the address under
+    ``email`` / ``to`` (or ``data.to``) and the event under ``event`` / ``type`` / ``status``.
+    Hard bounces and complaints auto-suppress the address.
+    """
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    events = payload if isinstance(payload, list) else [payload]
+    updated = 0
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        data = e.get("data") if isinstance(e.get("data"), dict) else {}
+        to = e.get("email") or e.get("to") or data.get("to") or data.get("email")
+        if isinstance(to, list):
+            to = to[0] if to else None
+        event = e.get("event") or e.get("type") or e.get("status") or ""
+        if to:
+            updated += await record_email_event(session, str(to), str(event))
+    return {"updated": updated}
+
+
+@router.post("/webhooks/whatsapp")
+async def webhook_whatsapp(request: Request, session: AsyncSession = Depends(get_session)):
+    """Receive WhatsApp status/inbound events (Meta Cloud API shape, or a simple test shape).
+
+    Maps a ``failed`` delivery status to ``bounced`` and an inbound message to ``replied``.
+    """
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"error": "invalid json"}, status_code=400)
+
+    updated = 0
+    # Simple test shape: {"phone": "...", "event": "replied"}.
+    if isinstance(payload, dict) and payload.get("phone"):
+        updated += await record_whatsapp_event(
+            session, str(payload["phone"]), str(payload.get("event", ""))
+        )
+        return {"updated": updated}
+
+    # Meta Cloud API shape: entry[].changes[].value.{statuses[],messages[]}.
+    for entry in (payload.get("entry") or []) if isinstance(payload, dict) else []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            for st in value.get("statuses") or []:
+                recipient = st.get("recipient_id") or ""
+                status = st.get("status") or ""
+                if recipient and status:
+                    updated += await record_whatsapp_event(session, recipient, status)
+            for msg in value.get("messages") or []:
+                sender = msg.get("from") or ""
+                if sender:
+                    updated += await record_whatsapp_event(session, sender, "replied")
+    return {"updated": updated}
 
 
 # ------------------------------------------------------------------ export
