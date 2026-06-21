@@ -59,6 +59,10 @@ class Lead(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     error: Mapped[str | None] = mapped_column(Text)
 
+    # Consent for WhatsApp outreach. Meta policy forbids cold-messaging non-opted-in
+    # contacts on the first touch; the WhatsApp send guard enforces this.
+    opt_in: Mapped[bool] = mapped_column(Integer, default=0)
+
     # Validation notes (e.g. ["missing_website", "invalid_email"]).
     validation_flags: Mapped[list] = mapped_column(JSON, default=list)
 
@@ -92,8 +96,36 @@ class Outreach(Base):
     # pending|approved|edited
     review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
 
+    # --- Email send tracking ---
+    # draft|queued|sent|failed|suppressed|bounced|replied
+    send_status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    send_error: Mapped[str | None] = mapped_column(Text)
+
+    # --- WhatsApp send tracking ---
+    wa_send_status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    wa_sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    wa_provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    wa_send_error: Mapped[str | None] = mapped_column(Text)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utcnow, onupdate=_utcnow
     )
 
     lead: Mapped["Lead"] = relationship(back_populates="outreach")
+
+
+class Suppression(Base):
+    """Do-not-contact list. Checked before every email send (CAN-SPAM / GDPR).
+
+    Populated by the unsubscribe endpoint and by bounce/complaint handling. Keyed by
+    lowercased email so a one-time opt-out applies across all jobs and future uploads.
+    """
+
+    __tablename__ = "suppressions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    reason: Mapped[str] = mapped_column(String(64), default="unsubscribe")  # unsubscribe|bounce|complaint|manual
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

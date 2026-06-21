@@ -1,26 +1,38 @@
 """All HTTP / HTMX endpoints."""
 from __future__ import annotations
 
+import csv
+import html
+import io
 import os
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.channels import suppression
 from app.config import get_settings
 from app.db import get_session
 from app.job_service import create_job
 from app.models import Job, Lead, Outreach
 from app.pipeline.orchestrator import process_lead
 from app.pipeline.worker import enqueue_job
+from app.send_service import send_email_for_lead, send_whatsapp_for_lead
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def _panel(request: Request, lead):
+    """Render the review panel partial with the context it needs (lead + settings)."""
+    return templates.TemplateResponse(
+        request, "partials/review_panel.html", {"lead": lead, "settings": get_settings()}
+    )
 
 
 # ------------------------------------------------------------------ home + upload
@@ -135,7 +147,9 @@ async def lead_review(
     lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
     if lead is None:
         return HTMLResponse("Lead not found", status_code=404)
-    return templates.TemplateResponse(request, "lead_review.html", {"lead": lead})
+    return templates.TemplateResponse(
+        request, "lead_review.html", {"lead": lead, "settings": get_settings()}
+    )
 
 
 @router.post("/leads/{lead_id}/approve", response_class=HTMLResponse)
@@ -146,7 +160,7 @@ async def lead_approve(
     if lead and lead.outreach:
         lead.outreach.review_status = "approved"
         await session.commit()
-    return templates.TemplateResponse(request, "partials/review_panel.html", {"lead": lead})
+    return _panel(request, lead)
 
 
 @router.post("/leads/{lead_id}/edit", response_class=HTMLResponse)
@@ -165,7 +179,7 @@ async def lead_edit(
         lead.outreach.whatsapp_body = whatsapp_body
         lead.outreach.review_status = "edited"
         await session.commit()
-    return templates.TemplateResponse(request, "partials/review_panel.html", {"lead": lead})
+    return _panel(request, lead)
 
 
 @router.post("/leads/{lead_id}/regenerate", response_class=HTMLResponse)
@@ -176,4 +190,99 @@ async def lead_regenerate(
     if lead:
         await process_lead(session, lead)
         await session.refresh(lead, attribute_names=["outreach"])
-    return templates.TemplateResponse(request, "partials/review_panel.html", {"lead": lead})
+    return _panel(request, lead)
+
+
+# ------------------------------------------------------------------ sending
+@router.post("/leads/{lead_id}/send", response_class=HTMLResponse)
+async def lead_send_email(
+    lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
+):
+    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    if lead is None:
+        return HTMLResponse("Lead not found", status_code=404)
+    await send_email_for_lead(session, lead)
+    return _panel(request, lead)
+
+
+@router.post("/leads/{lead_id}/send-whatsapp", response_class=HTMLResponse)
+async def lead_send_whatsapp(
+    lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
+):
+    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    if lead is None:
+        return HTMLResponse("Lead not found", status_code=404)
+    await send_whatsapp_for_lead(session, lead)
+    return _panel(request, lead)
+
+
+@router.post("/leads/{lead_id}/opt-in", response_class=HTMLResponse)
+async def lead_toggle_opt_in(
+    lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
+):
+    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    if lead:
+        lead.opt_in = 0 if lead.opt_in else 1
+        await session.commit()
+    return _panel(request, lead)
+
+
+# ------------------------------------------------------------------ compliance
+@router.get("/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe(email: str = "", session: AsyncSession = Depends(get_session)):
+    added = await suppression.add_suppression(session, email, reason="unsubscribe")
+    safe = html.escape(email or "")
+    note = (
+        "You've been unsubscribed and won't receive further emails."
+        if added
+        else "This address is already unsubscribed."
+        if email
+        else "No email address supplied."
+    )
+    return HTMLResponse(
+        "<!doctype html><meta charset='utf-8'>"
+        "<body style='font-family:system-ui;max-width:34rem;margin:4rem auto;"
+        "padding:0 1rem;color:#0f172a'>"
+        "<h1 style='font-size:1.25rem'>Unsubscribe</h1>"
+        f"<p>{note}</p>"
+        + (f"<p style='color:#64748b'>{safe}</p>" if safe else "")
+        + "</body>"
+    )
+
+
+# ------------------------------------------------------------------ export
+@router.get("/jobs/{job_id}/export.csv")
+async def export_job_csv(
+    job_id: str, request: Request, session: AsyncSession = Depends(get_session)
+):
+    """Download this job's leads + generated outreach as CSV (respects current filters)."""
+    job = await session.get(Job, job_id)
+    if job is None:
+        return HTMLResponse("Job not found", status_code=404)
+    leads = await _load_leads(session, job_id, dict(request.query_params))
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "name", "position", "company", "industry", "email", "phone",
+        "quality_score", "review_status", "send_status", "wa_send_status",
+        "email_subject", "email_body", "whatsapp_body",
+    ])
+    for lead in leads:
+        o = lead.outreach
+        writer.writerow([
+            lead.name or "", lead.position or "", lead.company or "",
+            lead.industry or "", lead.email or "", lead.phone or "",
+            (o.quality_score if o else "") or "",
+            (o.review_status if o else ""),
+            (o.send_status if o else ""),
+            (o.wa_send_status if o else ""),
+            (o.email_subject if o else "") or "",
+            (o.email_body if o else "") or "",
+            (o.whatsapp_body if o else "") or "",
+        ])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="leadforge-{job_id}.csv"'},
+    )

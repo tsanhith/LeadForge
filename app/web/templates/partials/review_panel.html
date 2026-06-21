@@ -75,5 +75,68 @@
         </button>
       </div>
     </form>
+
+    <!-- delivery -->
+    {% set reviewed = o.review_status in ['approved','edited'] %}
+    {% macro send_badge(status) %}
+      <span class="text-xs px-2 py-0.5 rounded
+        {% if status=='sent' %}bg-emerald-900 text-emerald-300
+        {% elif status=='failed' %}bg-rose-900 text-rose-300
+        {% elif status=='suppressed' %}bg-amber-900 text-amber-300
+        {% else %}bg-slate-700 text-slate-300{% endif %}">{{ status }}</span>
+    {% endmacro %}
+    <div class="card p-6 space-y-4">
+      <h3 class="text-sm font-semibold text-slate-300">Delivery</h3>
+      {% if not reviewed %}
+      <p class="text-xs text-amber-400">Approve (or save edits to) the draft to enable sending.</p>
+      {% endif %}
+
+      <!-- email -->
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-sm">
+          <span class="text-slate-400">Email</span>
+          <span class="text-slate-500">{{ lead.email or 'no address' }}</span>
+          {{ send_badge(o.send_status) }}
+        </div>
+        <button class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm"
+                {% if not reviewed or not lead.email or o.send_status=='sent' %}disabled{% endif %}
+                hx-post="/leads/{{ lead.id }}/send" hx-target="#review-panel" hx-swap="outerHTML"
+                hx-indicator="#send-spin">
+          {{ 'Sent' if o.send_status=='sent' else 'Send email' }}
+          <span id="send-spin" class="htmx-indicator">…</span>
+        </button>
+      </div>
+      {% if o.send_error %}<p class="text-xs text-rose-400">{{ o.send_error }}</p>{% endif %}
+      {% if o.send_status=='sent' and o.provider_message_id %}
+      <p class="text-xs text-slate-500">id: {{ o.provider_message_id }}</p>
+      {% endif %}
+
+      <!-- whatsapp -->
+      <div class="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+        <div class="text-sm">
+          <span class="text-slate-400">WhatsApp</span>
+          <span class="text-slate-500">{{ lead.phone or 'no number' }}</span>
+          {{ send_badge(o.wa_send_status) }}
+          {% if lead.opt_in %}<span class="text-xs px-2 py-0.5 rounded bg-emerald-900 text-emerald-300">opted-in</span>{% endif %}
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-xs"
+                  hx-post="/leads/{{ lead.id }}/opt-in" hx-target="#review-panel" hx-swap="outerHTML">
+            {{ 'Revoke opt-in' if lead.opt_in else 'Mark opted-in' }}
+          </button>
+          <button class="bg-green-700 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm"
+                  {% if not reviewed or not lead.phone or o.wa_send_status=='sent' or (settings.require_opt_in_for_whatsapp and not lead.opt_in) %}disabled{% endif %}
+                  hx-post="/leads/{{ lead.id }}/send-whatsapp" hx-target="#review-panel" hx-swap="outerHTML"
+                  hx-indicator="#wa-spin">
+            {{ 'Sent' if o.wa_send_status=='sent' else 'Send WhatsApp' }}
+            <span id="wa-spin" class="htmx-indicator">…</span>
+          </button>
+        </div>
+      </div>
+      {% if o.wa_send_error %}<p class="text-xs text-rose-400">{{ o.wa_send_error }}</p>{% endif %}
+      {% if settings.require_opt_in_for_whatsapp and not lead.opt_in %}
+      <p class="text-xs text-slate-500">WhatsApp needs opt-in consent before first contact (Meta policy).</p>
+      {% endif %}
+    </div>
   {% endif %}
 </div>

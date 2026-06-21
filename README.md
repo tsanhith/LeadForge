@@ -13,7 +13,15 @@ LeadForge automatically, for each lead:
 8. **QA-reviews** its own output with a *second* model and scores it /10.
 
 Everything lands in a dashboard with search, filters, upload history, and a human review
-flow (**Approve / Edit / Regenerate**).
+flow (**Approve / Edit / Regenerate**). Reviewed drafts can then be **sent**:
+
+9.  **Sends the email** through a configurable provider (`console` mock / `smtp` / `resend`),
+    with a CAN-SPAM/GDPR unsubscribe footer and a do-not-contact suppression check.
+10. **Sends the WhatsApp** message via Meta's WhatsApp Business Cloud API (opt-in gated).
+
+Until real credentials exist, both channels default to a **`console`** provider that logs the
+message and records it as sent — so the entire flow is exercisable today. Flip a provider in
+`.env` to go live.
 
 ## Architecture
 
@@ -21,7 +29,10 @@ flow (**Approve / Edit / Regenerate**).
 Excel upload → Validation → per-lead pipeline (concurrent, in-process worker):
   Company Research → Role Analysis → Opportunity Mapping → Personalization
   → Email Gen → WhatsApp Gen → QA Review → persist
-→ Dashboard (stats, search/filter, history) → Human Review
+→ Dashboard (stats, search/filter, history) → Human Review → Send (email + WhatsApp)
+
+ALL sends ──────────► Channels ──────────► {console | smtp | resend} · {console | meta}
+(one send_* interface)   (guard → deliver → record; suppression + opt-in enforced)
 
 ALL agents ─────────► LLM Gateway ─────────► {OpenRouter | NVIDIA NIM}
 (never call a provider directly)   (routes task→model, retries, fallback)
@@ -83,6 +94,10 @@ Covers header mapping, validation/dedupe, the JSON parser, and gateway routing +
 | `PIPELINE_CONCURRENCY` | leads processed in parallel per job. |
 | `QUALITY_THRESHOLD` | score at/above which a lead counts as "high quality". |
 | `LLM_FALLBACK_ORDER` | provider order tried when a route's primary fails. |
+| `EMAIL_PROVIDER` | `console` (mock) · `smtp` · `resend`. SMTP/Resend keys in `.env`. |
+| `WHATSAPP_PROVIDER` | `console` (mock) · `meta`. Token + phone-number-id in `.env`. |
+| `REQUIRE_OPT_IN_FOR_WHATSAPP` | block WhatsApp sends to non-opted-in leads (default on). |
+| `PUBLIC_BASE_URL` / `COMPANY_POSTAL_ADDRESS` | used to build the email unsubscribe footer. |
 
 ## Project layout
 
@@ -94,13 +109,21 @@ app/
   scraping/            website fetch + HTML→text
   agents/              7 task agents (each calls only the gateway)
   pipeline/            orchestrator (per lead) + in-process worker (per job)
+  channels/            email + whatsapp senders, suppression (one send_* interface)
   web/                 routes + Jinja2/HTMX templates
-  models.py db.py schemas.py job_service.py
+  models.py db.py schemas.py job_service.py send_service.py
 tests/                 unit tests
-scripts/make_sample.py sample export generator
+scripts/               make_sample.py · run_demo.py · e2e_one.py (one-lead live run)
 ```
 
-## Not in this MVP
+## Going live (when credentials arrive)
 
-Multi-user auth, Redis/Celery queue, rate limiting/observability, and actual *sending* of
-email/WhatsApp (LeadForge generates + reviews; sending is a deliberate next step).
+- **Email:** set `EMAIL_PROVIDER=smtp` + `SMTP_*` (or `EMAIL_PROVIDER=resend` + `RESEND_API_KEY`),
+  and a real `EMAIL_FROM`. Set up SPF + DKIM + DMARC on the sending domain first.
+- **WhatsApp:** set `WHATSAPP_PROVIDER=meta`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, and a
+  pre-approved `WHATSAPP_TEMPLATE_NAME` for cold first-contact.
+
+## Not yet built
+
+Multi-user auth, Redis/Celery durable queue, follow-up sequences, rate limiting/observability,
+and the sending-domain infra (SPF/DKIM/DMARC, warm-up) above.

@@ -34,6 +34,40 @@ class Settings(BaseSettings):
     request_timeout: float = 60.0
     max_retries: int = 2
 
+    # ---- Outreach: email channel ----
+    # Provider stays "console" (logs the email, marks it sent) until real credentials land,
+    # so the whole pipeline is exercisable end-to-end today. Switch to smtp/resend in .env.
+    email_provider: str = "console"  # console|smtp|resend
+    email_from: str = "outreach@leadforge.ai"
+    email_from_name: str = "LeadForge AI"
+    email_reply_to: str = ""
+
+    # SMTP — for the "official mail" (Google Workspace / Microsoft 365 / any SMTP relay).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+
+    # Resend (https://resend.com) transactional API — alternative to SMTP.
+    resend_api_key: str = ""
+
+    # ---- Outreach: WhatsApp channel (Meta WhatsApp Business Cloud API) ----
+    whatsapp_provider: str = "console"  # console|meta
+    whatsapp_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_api_version: str = "v21.0"
+    # Meta requires a pre-approved template for the FIRST message to a contact. If set, the
+    # generated copy is passed as body parameter {{1}}; otherwise a plain text message is sent
+    # (only valid inside the 24h customer-service window).
+    whatsapp_template_name: str = ""
+    whatsapp_template_lang: str = "en_US"
+
+    # ---- Compliance / public surface ----
+    public_base_url: str = "http://localhost:8000"  # used to build the unsubscribe link
+    company_postal_address: str = "LeadForge AI"     # CAN-SPAM requires a physical address
+    require_opt_in_for_whatsapp: bool = True
+
     @property
     def fallback_order(self) -> list[str]:
         return [p.strip() for p in self.llm_fallback_order.split(",") if p.strip()]

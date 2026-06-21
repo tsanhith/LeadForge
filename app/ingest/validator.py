@@ -78,6 +78,10 @@ def validate_rows(rows: list[dict]) -> list[ValidatedLead]:
             flags.append("invalid_email")
         if not data.get("email"):
             flags.append("missing_email")
+        # Deliverability hint carried from the source export (e.g. Apollo "Email Status").
+        # We don't drop the lead, but the send guard refuses these to protect the domain.
+        if (data.get("email_status") or "") in {"invalid", "unavailable"}:
+            flags.append("unverified_email")
 
         # No identity at all -> cannot research or reach out.
         valid = bool(data.get("company") or data.get("website") or email_ok)
