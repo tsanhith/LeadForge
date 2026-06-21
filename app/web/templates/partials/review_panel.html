@@ -139,5 +139,57 @@
       <p class="text-xs text-slate-500">WhatsApp needs opt-in consent before first contact (Meta policy).</p>
       {% endif %}
     </div>
+
+    <!-- follow-up sequence -->
+    {% set e = lead.enrollment %}
+    <div class="card p-6 space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-slate-300">Follow-up sequence</h3>
+        {% if e %}
+        <span class="text-xs px-2 py-0.5 rounded
+          {% if e.status=='active' %}bg-sky-900 text-sky-300
+          {% elif e.status=='completed' %}bg-emerald-900 text-emerald-300
+          {% else %}bg-slate-700 text-slate-300{% endif %}">
+          {{ e.status }}{% if e.stop_reason %} · {{ e.stop_reason }}{% endif %}
+        </span>
+        {% else %}
+        <span class="text-xs text-slate-500">not enrolled</span>
+        {% endif %}
+      </div>
+
+      {% if e %}
+        {% set total = e.sequence.steps|length %}
+        <div class="text-xs text-slate-400">
+          {{ e.current_step }}/{{ total }} follow-ups sent · {{ e.sequence.name }}
+          {% if e.status=='active' and e.next_run_at %}
+          <br>Next touch: {{ e.next_run_at.strftime('%Y-%m-%d %H:%M') }} UTC
+          {% endif %}
+        </div>
+        {% if e.last_sent_at %}
+        <div class="text-xs text-slate-500 border-t border-slate-800 pt-2">
+          Last sent ({{ e.last_channel }}): {{ (e.last_body or '')[:160] }}
+        </div>
+        {% endif %}
+        <div class="flex gap-2">
+          {% if e.status=='active' %}
+          <button class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-xs"
+                  hx-post="/leads/{{ lead.id }}/sequence/stop" hx-target="#review-panel" hx-swap="outerHTML">
+            Stop sequence
+          </button>
+          {% else %}
+          <button class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-xs"
+                  hx-post="/leads/{{ lead.id }}/sequence/start" hx-target="#review-panel" hx-swap="outerHTML">
+            Restart sequence
+          </button>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="text-xs text-slate-500">Auto-enrolls once the first message is sent — or start it now.</p>
+        <button class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-xs"
+                hx-post="/leads/{{ lead.id }}/sequence/start" hx-target="#review-panel" hx-swap="outerHTML">
+          Start sequence
+        </button>
+      {% endif %}
+    </div>
   {% endif %}
 </div>

@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     send_window_start_hour: int = 0     # local-time send window [start, end); 0..24 = always
     send_window_end_hour: int = 24
 
+    # ---- Follow-up sequences ----
+    sequences_enabled: bool = True  # auto-enroll leads after the first message is sent
+
     # ---- Compliance / public surface ----
     public_base_url: str = "http://localhost:8000"  # used to build the unsubscribe link
     company_postal_address: str = "LeadForge AI"     # CAN-SPAM requires a physical address
@@ -109,6 +112,8 @@ MODEL_ROUTES: dict[str, tuple[str, str]] = {
     "whatsapp": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
     # QA reviews everyone else's work -> route to a DIFFERENT model family (Qwen).
     "qa": ("nvidia_nim", "qwen/qwen3-next-80b-a3b-instruct"),
+    # Short follow-up nudges — same strong writer as the initial email.
+    "followup": ("nvidia_nim", "meta/llama-3.3-70b-instruct"),
 }
 
 # Default route used if a task name is missing from MODEL_ROUTES.
@@ -132,5 +137,43 @@ COMPANY_PROFILE: dict[str, object] = {
         "Cut manual, repetitive internal work",
         "Faster operations through automation",
         "Bespoke AI — not off-the-shelf templates",
+    ],
+}
+
+
+# --------------------------------------------------------------------------------------
+# Default follow-up sequence, seeded into the DB on first run. Steps fire *after* the
+# initial outreach; ``delay_days`` is measured from the previous touch. ``generate`` asks the
+# follow-up agent to write the copy; the templates are the fallback (and what tests use).
+# Placeholders: {first_name} {name} {company}.
+# --------------------------------------------------------------------------------------
+DEFAULT_SEQUENCE: dict[str, object] = {
+    "name": "Default 3-step follow-up",
+    "steps": [
+        {
+            "step_order": 1, "channel": "email", "delay_days": 3, "generate": True,
+            "subject_template": "Re: {company}",
+            "body_template": (
+                "Hi {first_name}, floating my note back to the top of your inbox in case it "
+                "got buried. Worth a quick chat about {company}? Happy to share a concrete "
+                "example."
+            ),
+        },
+        {
+            "step_order": 2, "channel": "whatsapp", "delay_days": 5, "generate": True,
+            "subject_template": None,
+            "body_template": (
+                "Hi {first_name}, did my note about {company} reach you? Glad to send a short "
+                "example if it's useful."
+            ),
+        },
+        {
+            "step_order": 3, "channel": "email", "delay_days": 6, "generate": True,
+            "subject_template": "Closing the loop — {company}",
+            "body_template": (
+                "Hi {first_name}, I'll assume the timing isn't right and won't keep emailing. "
+                "If it ever is, just reply here. Thanks for your time!"
+            ),
+        },
     ],
 }

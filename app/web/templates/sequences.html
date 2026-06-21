@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Sequences · LeadForge{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold">Follow-up sequences</h1>
+  <p class="text-sm text-slate-400 mt-1">
+    Steps run automatically after the initial outreach. A sequence stops the moment a lead
+    replies, bounces, or unsubscribes.
+    {% if not settings.sequences_enabled %}
+    <span class="text-amber-400">Sequences are currently disabled (SEQUENCES_ENABLED=false).</span>
+    {% endif %}
+  </p>
+</div>
+
+{% for seq in sequences %}
+<div class="card p-6 mb-4">
+  <div class="flex items-center gap-3 mb-4">
+    <h2 class="text-lg font-semibold">{{ seq.name }}</h2>
+    {% if seq.is_default %}<span class="text-xs px-2 py-0.5 rounded bg-indigo-900 text-indigo-300">default</span>{% endif %}
+    <span class="text-xs px-2 py-0.5 rounded {{ 'bg-emerald-900 text-emerald-300' if seq.active else 'bg-slate-700 text-slate-300' }}">
+      {{ 'active' if seq.active else 'inactive' }}
+    </span>
+  </div>
+  <table class="w-full text-sm">
+    <thead class="text-slate-400 text-left">
+      <tr><th class="py-2">#</th><th>Channel</th><th>Wait</th><th>Copy</th><th>Preview</th></tr>
+    </thead>
+    <tbody>
+      {% for step in seq.steps %}
+      <tr class="border-t border-slate-800">
+        <td class="py-2 pr-2">{{ step.step_order }}</td>
+        <td class="pr-2">{{ step.channel }}</td>
+        <td class="pr-2 text-slate-400">+{{ step.delay_days }}d</td>
+        <td class="pr-2">{{ 'AI-generated' if step.generate else 'template' }}</td>
+        <td class="text-slate-400">{{ (step.body_template or '')[:90] }}{% if (step.body_template or '')|length > 90 %}…{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card p-6 text-slate-400">No sequences defined.</div>
+{% endfor %}
+{% endblock %}

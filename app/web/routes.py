@@ -19,9 +19,10 @@ from app.channels import suppression
 from app.config import get_settings
 from app.db import get_session
 from app.job_service import create_job
-from app.models import Job, Lead, Outreach
+from app.models import Enrollment, Job, Lead, Outreach, Sequence
 from app.pipeline.orchestrator import process_lead
 from app.pipeline.worker import enqueue_job
+from app import sequences
 from app.send_service import (
     bulk_approve,
     bulk_queue,
@@ -33,6 +34,16 @@ from app.send_service import (
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+# Everything the review panel needs, eager-loaded so async rendering never lazy-loads.
+_LEAD_OPTS = [
+    selectinload(Lead.outreach),
+    selectinload(Lead.enrollment).selectinload(Enrollment.sequence).selectinload(Sequence.steps),
+]
+
+
+async def _load_lead(session: AsyncSession, lead_id: int):
+    return await session.get(Lead, lead_id, options=_LEAD_OPTS)
 
 
 def _panel(request: Request, lead):
@@ -211,7 +222,7 @@ async def _load_leads(session: AsyncSession, job_id: str, params: dict):
 async def lead_review(
     lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead is None:
         return HTMLResponse("Lead not found", status_code=404)
     return templates.TemplateResponse(
@@ -223,7 +234,7 @@ async def lead_review(
 async def lead_approve(
     lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead and lead.outreach:
         lead.outreach.review_status = "approved"
         await session.commit()
@@ -239,7 +250,7 @@ async def lead_edit(
     whatsapp_body: str = Form(""),
     session: AsyncSession = Depends(get_session),
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead and lead.outreach:
         lead.outreach.email_subject = email_subject
         lead.outreach.email_body = email_body
@@ -253,7 +264,7 @@ async def lead_edit(
 async def lead_regenerate(
     lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead:
         await process_lead(session, lead)
         await session.refresh(lead, attribute_names=["outreach"])
@@ -265,7 +276,7 @@ async def lead_regenerate(
 async def lead_send_email(
     lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead is None:
         return HTMLResponse("Lead not found", status_code=404)
     await send_email_for_lead(session, lead)
@@ -276,7 +287,7 @@ async def lead_send_email(
 async def lead_send_whatsapp(
     lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead is None:
         return HTMLResponse("Lead not found", status_code=404)
     await send_whatsapp_for_lead(session, lead)
@@ -287,11 +298,49 @@ async def lead_send_whatsapp(
 async def lead_toggle_opt_in(
     lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
 ):
-    lead = await session.get(Lead, lead_id, options=[selectinload(Lead.outreach)])
+    lead = await _load_lead(session, lead_id)
     if lead:
         lead.opt_in = 0 if lead.opt_in else 1
         await session.commit()
     return _panel(request, lead)
+
+
+# ------------------------------------------------------------------ follow-up sequence
+@router.post("/leads/{lead_id}/sequence/stop", response_class=HTMLResponse)
+async def lead_sequence_stop(
+    lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
+):
+    lead = await _load_lead(session, lead_id)
+    if lead:
+        await sequences.stop_enrollment(session, lead_id, "manual")
+        lead = await _load_lead(session, lead_id)
+    return _panel(request, lead)
+
+
+@router.post("/leads/{lead_id}/sequence/start", response_class=HTMLResponse)
+async def lead_sequence_start(
+    lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
+):
+    lead = await _load_lead(session, lead_id)
+    if lead:
+        if await sequences.get_enrollment(session, lead_id) is not None:
+            await sequences.restart_enrollment(session, lead_id)
+        else:
+            await sequences.enroll_lead(session, lead)
+        lead = await _load_lead(session, lead_id)
+    return _panel(request, lead)
+
+
+@router.get("/sequences", response_class=HTMLResponse)
+async def sequences_overview(request: Request, session: AsyncSession = Depends(get_session)):
+    seqs = (
+        await session.execute(
+            select(Sequence).options(selectinload(Sequence.steps)).order_by(Sequence.id)
+        )
+    ).scalars().all()
+    return templates.TemplateResponse(
+        request, "sequences.html", {"sequences": seqs, "settings": get_settings()}
+    )
 
 
 # ------------------------------------------------------------------ compliance

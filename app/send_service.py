@@ -25,6 +25,7 @@ from app.channels import whatsapp as whatsapp_channel
 from app.channels.whatsapp import normalize_msisdn
 from app.config import get_settings
 from app.models import Lead, Outreach, Suppression
+from app import sequences
 
 logger = logging.getLogger("leadforge.send")
 
@@ -79,6 +80,7 @@ async def send_email_for_lead(session: AsyncSession, lead: Lead) -> SendOutcome:
         o.send_error = None
         await session.commit()
         logger.info("email sent lead=%s via=%s id=%s", lead.id, result.provider, result.message_id)
+        await sequences.enroll_lead(session, lead)  # start follow-ups after the first touch
         return SendOutcome(True, "sent", f"Sent via {result.provider}.")
 
     o.send_status = "failed"
@@ -112,6 +114,7 @@ async def send_whatsapp_for_lead(session: AsyncSession, lead: Lead) -> SendOutco
         o.wa_send_error = None
         await session.commit()
         logger.info("whatsapp sent lead=%s via=%s id=%s", lead.id, result.provider, result.message_id)
+        await sequences.enroll_lead(session, lead)  # start follow-ups after the first touch
         return SendOutcome(True, "sent", f"Sent via {result.provider}.")
 
     o.wa_send_status = "failed"
@@ -225,6 +228,7 @@ async def record_email_event(session: AsyncSession, email: str, event: str) -> i
     rows = (
         await session.execute(
             select(Outreach).join(Lead).where(Lead.email.ilike(norm))
+            .options(selectinload(Outreach.lead))
         )
     ).scalars().all()
 
@@ -234,12 +238,18 @@ async def record_email_event(session: AsyncSession, email: str, event: str) -> i
             o.send_status = "bounced"
             o.send_error = f"{reason} reported via webhook"
         await suppression.add_suppression(session, norm, reason=reason)
+        stop_reason = reason
     elif ev in _REPLY_EVENTS:
         for o in rows:
             o.send_status = "replied"
+        stop_reason = "replied"
     else:
         return 0
     await session.commit()
+    # A reply/bounce ends the follow-up sequence for that lead.
+    for o in rows:
+        if o.lead is not None:
+            await sequences.stop_enrollment(session, o.lead.id, stop_reason)
     return len(rows)
 
 
@@ -268,10 +278,15 @@ async def record_whatsapp_event(session: AsyncSession, recipient: str, event: st
         for o in rows:
             o.wa_send_status = "bounced"
             o.wa_send_error = "delivery failed (webhook)"
+        stop_reason = "bounce"
     elif ev in _REPLY_EVENTS:
         for o in rows:
             o.wa_send_status = "replied"
+        stop_reason = "replied"
     else:
         return 0
     await session.commit()
+    for o in rows:
+        if o.lead is not None:
+            await sequences.stop_enrollment(session, o.lead.id, stop_reason)
     return len(rows)

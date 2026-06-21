@@ -52,6 +52,35 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _add_missing_columns(conn)
+    await _seed_default_sequence()
+
+
+async def _seed_default_sequence() -> None:
+    """Create the default follow-up sequence once, if no sequences exist yet."""
+    from sqlalchemy import func, select
+
+    from app.config import DEFAULT_SEQUENCE
+    from app.models import Sequence, SequenceStep
+
+    async with SessionLocal() as session:
+        existing = (
+            await session.execute(select(func.count()).select_from(Sequence))
+        ).scalar_one()
+        if existing:
+            return
+        seq = Sequence(name=str(DEFAULT_SEQUENCE["name"]), is_default=1, active=1)
+        for spec in DEFAULT_SEQUENCE["steps"]:  # type: ignore[index]
+            seq.steps.append(SequenceStep(
+                step_order=spec["step_order"],
+                channel=spec["channel"],
+                delay_days=spec["delay_days"],
+                generate=1 if spec.get("generate") else 0,
+                subject_template=spec.get("subject_template"),
+                body_template=spec.get("body_template"),
+            ))
+        session.add(seq)
+        await session.commit()
+        logger.info("seeded default sequence '%s' with %d steps", seq.name, len(seq.steps))
 
 
 async def _add_missing_columns(conn) -> None:
