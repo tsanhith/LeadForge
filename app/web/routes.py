@@ -16,11 +16,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth.deps import current_user
 from app.channels import suppression
-from app.config import get_settings
+from app.config import COMPANY_PROFILE, get_settings, merge_company_profile
 from app.db import get_session
 from app.job_service import create_job
-from app.models import Enrollment, Job, Lead, Outreach, Sequence
+from app.models import Enrollment, Job, Lead, Outreach, Sequence, User
 from app.pipeline.orchestrator import process_lead
 from app.pipeline.queue import enqueue_job
 from app import sequences
@@ -73,7 +74,9 @@ async def home(request: Request, session: AsyncSession = Depends(get_session)):
 
 @router.post("/upload")
 async def upload(
-    file: UploadFile, session: AsyncSession = Depends(get_session)
+    file: UploadFile,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(current_user),
 ):
     settings = get_settings()
     os.makedirs(settings.upload_dir, exist_ok=True)
@@ -82,7 +85,10 @@ async def upload(
     dest.write_bytes(await file.read())
 
     job = await create_job(
-        session, file_path=str(dest), filename=file.filename or dest.name
+        session,
+        file_path=str(dest),
+        filename=file.filename or dest.name,
+        user_id=user.id if user else None,
     )
     await enqueue_job(job.id)
     return RedirectResponse(url=f"/jobs/{job.id}", status_code=303)
@@ -263,11 +269,16 @@ async def lead_edit(
 
 @router.post("/leads/{lead_id}/regenerate", response_class=HTMLResponse)
 async def lead_regenerate(
-    lead_id: int, request: Request, session: AsyncSession = Depends(get_session)
+    lead_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(current_user),
 ):
     lead = await _load_lead(session, lead_id)
     if lead:
-        await process_lead(session, lead)
+        # Regenerate against the current user's company (their offering is what they pitch).
+        profile = user.company_profile if user else None
+        await process_lead(session, lead, profile)
         await session.refresh(lead, attribute_names=["outreach"])
     return _panel(request, lead)
 
@@ -330,6 +341,83 @@ async def lead_sequence_start(
             await sequences.enroll_lead(session, lead)
         lead = await _load_lead(session, lead_id)
     return _panel(request, lead)
+
+
+# ------------------------------------------------------------------ company profile
+def _lines(text: str) -> list[str]:
+    """Split a textarea (one item per line) into a clean list."""
+    return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
+
+@router.get("/company", response_class=HTMLResponse)
+async def company_settings(
+    request: Request, user: User | None = Depends(current_user)
+):
+    # Show the user's saved profile, or the default as a starting point/placeholder.
+    profile = (user.company_profile if user else None) or {}
+    return templates.TemplateResponse(
+        request,
+        "company.html",
+        {"profile": profile, "default": COMPANY_PROFILE, "saved": bool(profile.get("name"))},
+    )
+
+
+@router.post("/company", response_class=HTMLResponse)
+async def company_settings_save(
+    request: Request,
+    name: str = Form(""),
+    one_liner: str = Form(""),
+    services: str = Form(""),
+    value_props: str = Form(""),
+    sender_name: str = Form(""),
+    website: str = Form(""),
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(current_user),
+):
+    profile = {
+        "name": name.strip(),
+        "one_liner": one_liner.strip(),
+        "services": _lines(services),
+        "value_props": _lines(value_props),
+        "sender_name": sender_name.strip(),
+        "website": website.strip(),
+    }
+    if user is not None:
+        # session.get returns the live instance; reassign so SQLAlchemy flags the JSON change.
+        db_user = await session.get(User, user.id)
+        db_user.company_profile = profile
+        await session.commit()
+    return templates.TemplateResponse(
+        request,
+        "company.html",
+        {"profile": profile, "default": COMPANY_PROFILE, "saved": True, "just_saved": True},
+    )
+
+
+@router.post("/jobs/{job_id}/regenerate", response_class=HTMLResponse)
+async def job_regenerate(
+    job_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User | None = Depends(current_user),
+):
+    """Re-run the whole job through the pipeline against the current user's company.
+
+    Claims the job for the current user (so its leads pitch *their* offering) and re-enqueues
+    it; the worker resets each lead and regenerates. Useful after editing the company profile.
+    """
+    job = await session.get(Job, job_id)
+    if job is None:
+        return HTMLResponse("Job not found", status_code=404)
+    if user is not None:
+        job.user_id = user.id
+    await session.execute(
+        Lead.__table__.update().where(Lead.job_id == job_id).values(status="pending")
+    )
+    job.status = "processing"
+    await session.commit()
+    await enqueue_job(job_id)
+    return await _table_response(request, session, job, dict(request.query_params))
 
 
 @router.get("/sequences", response_class=HTMLResponse)

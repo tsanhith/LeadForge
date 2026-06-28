@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from app.agents.base import run_json_agent
-from app.config import COMPANY_PROFILE
+from app.config import merge_company_profile
 from app.schemas import (
     CompanyResearch,
     EmailContent,
@@ -13,13 +13,19 @@ from app.schemas import (
     RoleProfile,
 )
 
-_SYSTEM = (
-    "You are an expert B2B copywriter writing on behalf of the company below. Write a short, "
-    "genuinely personalized cold email (90-150 words). Reference the prospect's company and "
-    "role naturally. No fluff, no buzzword soup, no fake personal claims, no placeholders "
-    "like [Name]. End with a soft, low-friction call to action. Respond ONLY with JSON.\n\n"
-    f"OUR COMPANY:\n{json.dumps(COMPANY_PROFILE, indent=2)}"
-)
+
+def _system(company_profile: dict | None) -> str:
+    profile = merge_company_profile(company_profile)
+    sign = profile.get("sender_name") or "the team"
+    return (
+        "You are an expert B2B copywriter writing on behalf of the company below. Write a "
+        "short, genuinely personalized cold email (90-150 words). Reference the prospect's "
+        "company and role naturally. No fluff, no buzzword soup, no fake personal claims, no "
+        f"placeholders like [Name]. Sign off as {sign}. End with a soft, low-friction call to "
+        "action. Respond ONLY with JSON.\n\n"
+        f"OUR COMPANY:\n{json.dumps(profile, indent=2)}"
+    )
+
 
 _SCHEMA_HINT = '{"subject": str, "body": str}'
 
@@ -32,6 +38,7 @@ async def generate_email(
     role_profile: RoleProfile,
     opportunity: Opportunity,
     personalization: Personalization,
+    company_profile: dict | None = None,
 ) -> EmailContent:
     user = (
         f"Recipient: {name or 'there'} — {position or ''} at {company_research.company}\n"
@@ -42,11 +49,11 @@ async def generate_email(
         f"Talking points: {', '.join(personalization.talking_points)}\n\n"
         f"Write the email. Return JSON: {_SCHEMA_HINT}\n"
         "- subject: specific to their company, not generic\n"
-        "- body: greeting using their first name, personalized, signed off as the team"
+        "- body: greeting using their first name, personalized, signed off as instructed"
     )
     return await run_json_agent(
         task="email",
-        system=_SYSTEM,
+        system=_system(company_profile),
         user=user,
         schema=EmailContent,
         temperature=0.7,

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Company · LeadForge{% endblock %}
+{% block content %}
+<div class="mb-8">
+  <h1 class="font-display text-3xl font-semibold tracking-tight">Your company</h1>
+  <p class="text-sm text-muted mt-1 max-w-2xl">
+    This is the offering every generated email and WhatsApp message pitches. Fill it in as
+    <em>your</em> business — the AI writes outreach selling this to each lead. Changes apply to
+    new uploads and to anything you regenerate.
+  </p>
+</div>
+
+{% if just_saved %}
+<div class="card p-3 mb-6 flex items-center gap-2 text-sm" style="background:#e7f2ec;border-color:#cfe6da">
+  <span class="badge badge-green">saved</span>
+  <span class="text-accent-dark">Company profile updated. New and regenerated outreach will use it.</span>
+</div>
+{% elif not saved %}
+<div class="card p-3 mb-6 text-sm" style="background:#fbeede;border-color:#f0dcc0">
+  <span style="color:#a25b16">You haven't set your company yet — until you do, messages pitch the built-in default
+  ("{{ default.name }}"). Fill this in to make outreach about your business.</span>
+</div>
+{% endif %}
+
+<form method="post" action="/company" class="card p-6 space-y-5 max-w-2xl">
+  <div>
+    <label class="text-xs font-medium text-muted">Company name</label>
+    <input name="name" value="{{ profile.get('name','') }}" required
+           placeholder="e.g. {{ default.name }}" class="field mt-1.5">
+  </div>
+
+  <div>
+    <label class="text-xs font-medium text-muted">One-liner</label>
+    <input name="one_liner" value="{{ profile.get('one_liner','') }}"
+           placeholder="e.g. {{ default.one_liner }}" class="field mt-1.5">
+    <p class="text-xs text-faint mt-1">A single sentence on what you do — the core of every pitch.</p>
+  </div>
+
+  <div>
+    <label class="text-xs font-medium text-muted">Services / offerings</label>
+    <textarea name="services" rows="4" class="field mt-1.5"
+              placeholder="One per line, e.g.&#10;{{ default.services|join('\n') }}">{{ profile.get('services', [])|join('\n') }}</textarea>
+    <p class="text-xs text-faint mt-1">One per line. The opportunity agent matches these to each lead's needs.</p>
+  </div>
+
+  <div>
+    <label class="text-xs font-medium text-muted">Value propositions</label>
+    <textarea name="value_props" rows="3" class="field mt-1.5"
+              placeholder="One per line, e.g.&#10;{{ default.value_props|join('\n') }}">{{ profile.get('value_props', [])|join('\n') }}</textarea>
+    <p class="text-xs text-faint mt-1">One per line. The concrete outcomes you deliver.</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <label class="text-xs font-medium text-muted">Sign-off name</label>
+      <input name="sender_name" value="{{ profile.get('sender_name','') }}"
+             placeholder="e.g. Sanhith, or 'The Acme Team'" class="field mt-1.5">
+      <p class="text-xs text-faint mt-1">How emails are signed. Blank → "the team".</p>
+    </div>
+    <div>
+      <label class="text-xs font-medium text-muted">Website <span class="text-faint">(optional)</span></label>
+      <input name="website" value="{{ profile.get('website','') }}"
+             placeholder="https://yourcompany.com" class="field mt-1.5">
+    </div>
+  </div>
+
+  <div class="pt-1">
+    <button class="btn">Save company profile</button>
+  </div>
+</form>
+{% endblock %}

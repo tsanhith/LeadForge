@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db import SessionLocal
+from app.job_service import company_profile_for_job
 from app.models import Job, Lead
 from app.pipeline.orchestrator import process_lead
 
@@ -55,6 +56,7 @@ async def _process_job(job_id: str) -> None:
                 select(Lead.id).where(Lead.job_id == job_id, Lead.status == "pending")
             )
         ).scalars().all()
+        company_profile = await company_profile_for_job(session, job_id)
 
     logger.info("job %s: processing %d leads", job_id, len(lead_ids))
 
@@ -66,7 +68,7 @@ async def _process_job(job_id: str) -> None:
                 )
                 if lead is None:
                     return
-                await process_lead(session, lead)
+                await process_lead(session, lead, company_profile)
             await _bump_counts(job_id)
 
     await asyncio.gather(*(worker(lid) for lid in lead_ids))

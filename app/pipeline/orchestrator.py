@@ -36,8 +36,14 @@ from app.scraping.fetcher import fetch_site
 logger = logging.getLogger("leadforge.pipeline")
 
 
-async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
-    """Run all agents for one lead. Commits progress as it goes."""
+async def process_lead(
+    session: AsyncSession, lead: Lead, company_profile: dict | None = None
+) -> Lead:
+    """Run all agents for one lead. Commits progress as it goes.
+
+    ``company_profile`` is the offering being pitched (the uploader's company). When omitted,
+    the agents fall back to the built-in default profile.
+    """
     lead.status = "processing"
     lead.error = None
     await session.commit()
@@ -60,7 +66,7 @@ async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
 
         # 3. Opportunity mapping (against OUR services).
         opportunity = await opportunity_mapping.map_opportunity(
-            company_research=company, role_profile=role
+            company_research=company, role_profile=role, company_profile=company_profile
         )
         lead.opportunity = opportunity.model_dump()
         await session.commit()
@@ -84,6 +90,7 @@ async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
             role_profile=role,
             opportunity=opportunity,
             personalization=personalization,
+            company_profile=company_profile,
         )
 
         # 6. WhatsApp generation.
@@ -92,6 +99,7 @@ async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
             company_research=company,
             opportunity=opportunity,
             personalization=personalization,
+            company_profile=company_profile,
         )
 
         # 7. QA review (second model).
@@ -125,11 +133,21 @@ async def _save_outreach(
     qa,
 ) -> None:
     outreach = lead.outreach or Outreach(lead_id=lead.id)
+    regenerated = outreach.id is not None  # reusing an existing row => this is a re-generation
     outreach.email_subject = email.subject
     outreach.email_body = email.body
     outreach.whatsapp_body = whatsapp.message
     outreach.quality_score = qa.quality_score
     outreach.qa_feedback = qa.model_dump()
+    if regenerated:
+        # The copy is new, so any prior approval/send applied to *old* text. Reset to a clean
+        # draft (needs re-review, not yet sent) so the UI and send guards don't mislabel it.
+        outreach.review_status = "pending"
+        outreach.send_status = "draft"
+        outreach.wa_send_status = "draft"
+        outreach.sent_at = outreach.wa_sent_at = None
+        outreach.provider_message_id = outreach.wa_provider_message_id = None
+        outreach.send_error = outreach.wa_send_error = None
     if outreach.id is None:
         session.add(outreach)
     lead.outreach = outreach

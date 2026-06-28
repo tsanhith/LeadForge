@@ -8,12 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingest.excel import parse_file
 from app.ingest.validator import validate_rows
-from app.models import Job, Lead
+from app.models import Job, Lead, User
 
 _LEAD_FIELDS = (
     "name", "position", "company", "website", "linkedin",
     "industry", "email", "phone", "description",
 )
+
+
+async def company_profile_for_job(session: AsyncSession, job_id: str) -> dict | None:
+    """The company profile a job's outreach should pitch: its uploader's.
+
+    Returns ``None`` for jobs with no uploader (e.g. pre-dating profiles), which the agents
+    resolve to the built-in default via :func:`app.config.merge_company_profile`.
+    """
+    job = await session.get(Job, job_id)
+    if job is None or job.user_id is None:
+        return None
+    user = await session.get(User, job.user_id)
+    return user.company_profile if user else None
 
 
 async def _next_job_id(session: AsyncSession) -> str:
@@ -26,16 +39,19 @@ async def _next_job_id(session: AsyncSession) -> str:
     return f"{today}-{count + 1:03d}"
 
 
-async def create_job(session: AsyncSession, *, file_path: str, filename: str) -> Job:
+async def create_job(
+    session: AsyncSession, *, file_path: str, filename: str, user_id: int | None = None
+) -> Job:
     """Parse the file, validate rows, persist a Job and its valid Leads.
 
     Invalid rows (no identity / duplicates) are counted but not queued for processing.
+    ``user_id`` ties the job to its uploader so the pipeline pitches that user's company.
     """
     rows = parse_file(file_path)
     validated = validate_rows(rows)
 
     job_id = await _next_job_id(session)
-    job = Job(id=job_id, source_filename=filename, status="processing")
+    job = Job(id=job_id, source_filename=filename, status="processing", user_id=user_id)
 
     valid_count = 0
     invalid_count = 0

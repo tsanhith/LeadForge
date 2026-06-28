@@ -25,6 +25,11 @@ class Job(Base):
     source_filename: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="processing")  # processing|done|failed
 
+    # Who uploaded this job — their company profile is what every lead's outreach pitches.
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+
     total: Mapped[int] = mapped_column(Integer, default=0)        # valid leads queued
     processed: Mapped[int] = mapped_column(Integer, default=0)
     high_quality: Mapped[int] = mapped_column(Integer, default=0)
@@ -36,6 +41,7 @@ class Job(Base):
     leads: Mapped[list["Lead"]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
+    user: Mapped["User | None"] = relationship()
 
 
 class Lead(Base):
@@ -198,6 +204,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="member")  # admin|member
     active: Mapped[bool] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    # The user's own company — the offering every generated message pitches. Shape mirrors
+    # config.COMPANY_PROFILE: {name, one_liner, services[], value_props[], sender_name, website}.
+    company_profile: Mapped[dict | None] = mapped_column(JSON)
 
 
 class Suppression(Base):

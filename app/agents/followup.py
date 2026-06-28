@@ -9,17 +9,20 @@ from __future__ import annotations
 import json
 
 from app.agents.base import run_json_agent
-from app.config import COMPANY_PROFILE
+from app.config import merge_company_profile
 from app.schemas import FollowUpContent
 
-_SYSTEM = (
-    "You write short, polite B2B follow-up messages on behalf of the company below, to a "
-    "prospect who received an earlier message and has not replied. Rules: reference the "
-    "earlier outreach naturally, add one small piece of value or a soft reason to reply, "
-    "stay under 80 words, no guilt-tripping, no 'just bumping this', vary the wording from a "
-    "typical follow-up. Respond ONLY with JSON.\n\n"
-    f"OUR COMPANY:\n{json.dumps(COMPANY_PROFILE, indent=2)}"
-)
+
+def _system(company_profile: dict | None) -> str:
+    profile = merge_company_profile(company_profile)
+    return (
+        "You write short, polite B2B follow-up messages on behalf of the company below, to a "
+        "prospect who received an earlier message and has not replied. Rules: reference the "
+        "earlier outreach naturally, add one small piece of value or a soft reason to reply, "
+        "stay under 80 words, no guilt-tripping, no 'just bumping this', vary the wording from "
+        "a typical follow-up. Respond ONLY with JSON.\n\n"
+        f"OUR COMPANY:\n{json.dumps(profile, indent=2)}"
+    )
 
 
 async def generate_followup(
@@ -32,6 +35,7 @@ async def generate_followup(
     original_subject: str | None,
     original_body: str | None,
     outreach_angle: str | None,
+    company_profile: dict | None = None,
 ) -> FollowUpContent:
     schema_hint = (
         '{"message": str}' if channel == "whatsapp" else '{"subject": str, "message": str}'
@@ -49,7 +53,7 @@ async def generate_followup(
     )
     return await run_json_agent(
         task="followup",
-        system=_SYSTEM,
+        system=_system(company_profile),
         user=user,
         schema=FollowUpContent,
         temperature=0.7,

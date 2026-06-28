@@ -20,6 +20,12 @@ logger = logging.getLogger("leadforge.db")
 # never alters existing ones, so we add these by hand on startup (idempotent). Keep in sync
 # with app.models. Format: table -> [(column, column DDL)].
 _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "jobs": [
+        ("user_id", "INTEGER"),
+    ],
+    "users": [
+        ("company_profile", "JSON"),
+    ],
     "leads": [
         ("opt_in", "INTEGER DEFAULT 0"),
     ],
