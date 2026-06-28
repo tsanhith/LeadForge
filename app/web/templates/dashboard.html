@@ -1,61 +1,65 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="grid md:grid-cols-2 gap-6 mb-8">
-  <div class="card p-6">
-    <h2 class="text-lg font-semibold mb-4">Upload leads</h2>
+<div class="mb-8">
+  <h1 class="font-display text-3xl font-semibold tracking-tight">Uploads</h1>
+  <p class="text-sm text-muted mt-1">Drop a lead export and LeadForge researches, writes, and QA-scores each one.</p>
+</div>
+
+<div class="grid md:grid-cols-3 gap-5 mb-10">
+  <div class="card p-6 md:col-span-2">
+    <h2 class="font-display text-lg font-semibold mb-4">Upload leads</h2>
     <form action="/upload" method="post" enctype="multipart/form-data" class="space-y-4">
-      <input type="file" name="file" accept=".xlsx,.xls,.csv" required
-             class="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4
-                    file:rounded-lg file:border-0 file:bg-indigo-600 file:text-white
-                    hover:file:bg-indigo-500 cursor-pointer">
-      <p class="text-xs text-slate-400">
-        Apollo / ZoomInfo / Sales Navigator exports (.xlsx or .csv). Columns are auto-mapped.
-      </p>
-      <button class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-medium">
-        Upload &amp; process
-      </button>
+      <label class="block border border-dashed border-line rounded-xl px-4 py-6 text-center cursor-pointer hover:border-accent transition-colors bg-paper/40">
+        <input type="file" name="file" accept=".xlsx,.xls,.csv" required
+               class="block w-full text-sm text-ink file:mr-4 file:py-2 file:px-4
+                      file:rounded-lg file:border-0 file:bg-accent file:text-white
+                      file:font-medium hover:file:bg-accent-dark file:cursor-pointer cursor-pointer">
+        <p class="text-xs text-muted mt-3">
+          Apollo · ZoomInfo · Sales Navigator exports (.xlsx or .csv). Columns are auto-mapped.
+        </p>
+      </label>
+      <button class="btn">Upload &amp; process</button>
     </form>
   </div>
+
   <div class="card p-6">
-    <h2 class="text-lg font-semibold mb-4">Totals</h2>
-    <div class="grid grid-cols-2 gap-4">
-      <div><div class="text-3xl font-bold">{{ totals.jobs }}</div><div class="text-xs text-slate-400">Uploads</div></div>
-      <div><div class="text-3xl font-bold">{{ totals.leads }}</div><div class="text-xs text-slate-400">Leads</div></div>
-      <div><div class="text-3xl font-bold text-emerald-400">{{ totals.high_quality }}</div><div class="text-xs text-slate-400">High quality</div></div>
-      <div><div class="text-3xl font-bold text-amber-400">{{ totals.needs_review }}</div><div class="text-xs text-slate-400">Needs review</div></div>
+    <h2 class="font-display text-lg font-semibold mb-4">Totals</h2>
+    <div class="grid grid-cols-2 gap-y-5 gap-x-4">
+      <div><div class="font-display text-3xl font-semibold">{{ totals.jobs }}</div><div class="text-xs text-muted mt-0.5">Uploads</div></div>
+      <div><div class="font-display text-3xl font-semibold">{{ totals.leads }}</div><div class="text-xs text-muted mt-0.5">Leads</div></div>
+      <div><div class="font-display text-3xl font-semibold text-accent">{{ totals.high_quality }}</div><div class="text-xs text-muted mt-0.5">High quality</div></div>
+      <div><div class="font-display text-3xl font-semibold" style="color:#a25b16">{{ totals.needs_review }}</div><div class="text-xs text-muted mt-0.5">Needs review</div></div>
     </div>
   </div>
 </div>
 
-<h2 class="text-lg font-semibold mb-3">Upload history</h2>
+<h2 class="font-display text-lg font-semibold mb-3">Upload history</h2>
 <div class="card overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-[#1b2237] text-slate-400 text-left">
+    <thead class="bg-paper text-muted text-left border-b border-line">
       <tr>
-        <th class="px-4 py-3">Job</th><th class="px-4 py-3">File</th>
-        <th class="px-4 py-3">Status</th><th class="px-4 py-3">Leads</th>
-        <th class="px-4 py-3">High</th><th class="px-4 py-3">Review</th>
-        <th class="px-4 py-3">Created</th>
+        <th class="px-5 py-3 font-medium">Job</th><th class="px-5 py-3 font-medium">File</th>
+        <th class="px-5 py-3 font-medium">Status</th><th class="px-5 py-3 font-medium">Leads</th>
+        <th class="px-5 py-3 font-medium">High</th><th class="px-5 py-3 font-medium">Review</th>
+        <th class="px-5 py-3 font-medium">Created</th>
       </tr>
     </thead>
     <tbody>
       {% for job in jobs %}
-      <tr class="border-t border-slate-800 hover:bg-[#1a2138] cursor-pointer"
+      <tr class="border-t border-line hover:bg-paper cursor-pointer transition-colors"
           onclick="window.location='/jobs/{{ job.id }}'">
-        <td class="px-4 py-3 font-mono text-indigo-300">{{ job.id }}</td>
-        <td class="px-4 py-3">{{ job.source_filename }}</td>
-        <td class="px-4 py-3">
-          <span class="px-2 py-0.5 rounded text-xs
-            {{ 'bg-emerald-900 text-emerald-300' if job.status=='done' else 'bg-amber-900 text-amber-300' }}">
-            {{ job.status }}</span>
+        <td class="px-5 py-3 font-mono text-xs text-accent-dark">{{ job.id }}</td>
+        <td class="px-5 py-3">{{ job.source_filename }}</td>
+        <td class="px-5 py-3">
+          <span class="badge {{ 'badge-green' if job.status=='done' else 'badge-amber' }}">{{ job.status }}</span>
         </td>
-        <td class="px-4 py-3">{{ job.total }}</td>
-        <td class="px-4 py-3 text-emerald-400">{{ job.high_quality }}</td>
-        <td class="px-4 py-3 text-amber-400">{{ job.needs_review }}</td>
-        <td class="px-4 py-3 text-slate-400">{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="px-5 py-3">{{ job.total }}</td>
+        <td class="px-5 py-3 text-accent font-medium">{{ job.high_quality }}</td>
+        <td class="px-5 py-3" style="color:#a25b16">{{ job.needs_review }}</td>
+        <td class="px-5 py-3 text-muted">{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No uploads yet.</td></tr>
+      <tr><td colspan="7" class="px-5 py-10 text-center text-faint">No uploads yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>

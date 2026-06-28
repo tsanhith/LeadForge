@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ job.id }} · LeadForge{% endblock %}
 {% block content %}
-<div class="mb-6">
-  <a href="/" class="text-sm text-indigo-400">&larr; All uploads</a>
-  <div class="flex items-center gap-3 mt-2">
-    <h1 class="text-2xl font-bold font-mono">{{ job.id }}</h1>
-    <span class="text-slate-400">{{ job.source_filename }}</span>
+<div class="mb-8">
+  <a href="/" class="text-sm text-muted hover:text-ink transition-colors">&larr; All uploads</a>
+  <div class="flex flex-wrap items-baseline gap-3 mt-3">
+    <h1 class="font-display text-2xl font-semibold tracking-tight font-mono">{{ job.id }}</h1>
+    <span class="text-muted">{{ job.source_filename }}</span>
   </div>
 </div>
 

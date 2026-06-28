@@ -5,28 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · LeadForge</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>body { background:#0b1020; color:#e5e7eb; } .card { background:#151b2e; border:1px solid #233; border-radius:0.75rem; }</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family:'Inter',system-ui,sans-serif; background:#faf8f4; color:#1c1a17; }
+    .font-display { font-family:'Fraunces',Georgia,serif; }
+    .card { background:#fff; border:1px solid #e7e2d9; border-radius:16px; box-shadow:0 4px 24px rgba(28,26,23,.06); }
+    .field { width:100%; background:#fff; border:1px solid #e7e2d9; border-radius:10px; padding:.55rem .75rem; font-size:.875rem; color:#1c1a17; transition:border-color .15s, box-shadow .15s; }
+    .field:focus { outline:none; border-color:#157f5b; box-shadow:0 0 0 3px rgba(21,127,91,.14); }
+    .btn { width:100%; background:#157f5b; color:#fff; border:none; border-radius:10px; padding:.6rem 1rem; font-size:.875rem; font-weight:500; cursor:pointer; transition:background .15s; }
+    .btn:hover { background:#0f6549; }
+  </style>
 </head>
-<body class="min-h-screen flex items-center justify-center">
-  <div class="card p-8 w-full max-w-sm">
-    <div class="text-2xl font-bold tracking-tight mb-1">⚡ Lead<span class="text-indigo-400">Forge</span></div>
-    <p class="text-sm text-slate-400 mb-6">Sign in to continue.</p>
-    {% if error %}
-    <div class="mb-4 text-sm text-rose-400 bg-rose-950/40 border border-rose-900 rounded-lg px-3 py-2">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="/login" class="space-y-4">
-      <div>
-        <label class="text-xs text-slate-400">Email</label>
-        <input name="email" type="email" required autofocus
-               class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">
-      </div>
-      <div>
-        <label class="text-xs text-slate-400">Password</label>
-        <input name="password" type="password" required
-               class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">
-      </div>
-      <button class="w-full bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm font-medium">Sign in</button>
-    </form>
+<body class="min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-sm">
+    <div class="flex items-center gap-2.5 mb-6 justify-center">
+      <span class="w-3 h-3 rounded-sm" style="background:#157f5b"></span>
+      <span class="font-display text-2xl font-semibold tracking-tight">LeadForge</span>
+    </div>
+    <div class="card p-8">
+      <h1 class="font-display text-xl font-semibold mb-1">Welcome back</h1>
+      <p class="text-sm mb-6" style="color:#6f675c">Sign in to continue.</p>
+      {% if error %}
+      <div class="mb-4 text-sm rounded-lg px-3 py-2" style="color:#b42318;background:#fbe7e6;border:1px solid #f3cfcc">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/login" class="space-y-4">
+        <div>
+          <label class="text-xs font-medium" style="color:#6f675c">Email</label>
+          <input name="email" type="email" required autofocus class="field mt-1.5">
+        </div>
+        <div>
+          <label class="text-xs font-medium" style="color:#6f675c">Password</label>
+          <input name="password" type="password" required class="field mt-1.5">
+        </div>
+        <button class="btn">Sign in</button>
+      </form>
+    </div>
   </div>
 </body>
 </html>

@@ -6,32 +6,87 @@
   <title>{% block title %}LeadForge{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            paper: '#faf8f4',
+            ink:   '#1c1a17',
+            muted: '#6f675c',
+            faint: '#a59c8e',
+            line:  '#e7e2d9',
+            accent: { DEFAULT: '#157f5b', dark: '#0f6549', soft: '#e7f2ec' },
+          },
+          fontFamily: {
+            display: ['Fraunces', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
   <style>
-    body { background:#0b1020; color:#e5e7eb; }
-    .card { background:#151b2e; border:1px solid #233; border-radius:0.75rem; }
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .font-display { font-family: 'Fraunces', Georgia, serif; font-optical-sizing: auto; }
+
+    .card { background:#fff; border:1px solid #e7e2d9; border-radius:14px;
+            box-shadow:0 1px 2px rgba(28,26,23,.05); }
+
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem;
+           background:#157f5b; color:#fff; border:1px solid transparent; border-radius:10px;
+           padding:.5rem 1rem; font-size:.875rem; font-weight:500; line-height:1.2;
+           transition:background .15s, box-shadow .15s; cursor:pointer; }
+    .btn:hover { background:#0f6549; }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+    .btn-ghost { background:#fff; color:#1c1a17; border:1px solid #e7e2d9; }
+    .btn-ghost:hover { background:#f4f0e9; }
+    .btn-sm { padding:.35rem .7rem; font-size:.8rem; border-radius:8px; }
+
+    .field { width:100%; background:#fff; border:1px solid #e7e2d9; border-radius:10px;
+             padding:.5rem .75rem; font-size:.875rem; color:#1c1a17;
+             transition:border-color .15s, box-shadow .15s; }
+    .field:focus { outline:none; border-color:#157f5b; box-shadow:0 0 0 3px rgba(21,127,91,.14); }
+    .field::placeholder { color:#a59c8e; }
+
+    .badge { display:inline-flex; align-items:center; padding:.12rem .5rem; border-radius:999px;
+             font-size:.7rem; font-weight:500; white-space:nowrap; }
+    .badge-green { background:#e7f2ec; color:#157f5b; }
+    .badge-amber { background:#fbeede; color:#a25b16; }
+    .badge-rose  { background:#fbe7e6; color:#b42318; }
+    .badge-sky   { background:#e7eefb; color:#2255c7; }
+    .badge-gray  { background:#f1ece4; color:#6f675c; }
+
+    .htmx-indicator { opacity:0; transition:opacity .2s; }
+    .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity:1; }
   </style>
 </head>
-<body class="min-h-screen">
-  <header class="border-b border-slate-800 bg-[#0d1326]">
-    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-      <a href="/" class="text-xl font-bold tracking-tight">
-        ⚡ Lead<span class="text-indigo-400">Forge</span>
+<body class="min-h-screen bg-paper text-ink antialiased">
+  <header class="border-b border-line bg-paper/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2.5">
+        <span class="w-2.5 h-2.5 rounded-sm bg-accent inline-block"></span>
+        <span class="font-display text-xl font-semibold tracking-tight">LeadForge</span>
       </a>
-      <nav class="flex items-center gap-4 text-sm text-slate-400">
-        <a href="/" class="hover:text-slate-200">Uploads</a>
-        <a href="/sequences" class="hover:text-slate-200">Sequences</a>
+      <nav class="flex items-center gap-6 text-sm">
+        <a href="/" class="text-muted hover:text-ink transition-colors">Uploads</a>
+        <a href="/sequences" class="text-muted hover:text-ink transition-colors">Sequences</a>
         {% if request.session.get('user_role') == 'admin' %}
-        <a href="/users" class="hover:text-slate-200">Users</a>
+        <a href="/users" class="text-muted hover:text-ink transition-colors">Users</a>
         {% endif %}
         {% if request.session.get('user_email') %}
-        <span class="text-slate-600">|</span>
-        <span class="text-slate-500">{{ request.session.get('user_email') }}</span>
-        <a href="/logout" class="hover:text-slate-200">Sign out</a>
+        <div class="flex items-center gap-3 pl-6 border-l border-line">
+          <span class="text-faint hidden sm:inline">{{ request.session.get('user_email') }}</span>
+          <a href="/logout" class="text-muted hover:text-ink transition-colors">Sign out</a>
+        </div>
         {% endif %}
       </nav>
     </div>
   </header>
-  <main class="max-w-6xl mx-auto px-6 py-8">
+  <main class="max-w-6xl mx-auto px-6 py-10">
     {% block content %}{% endblock %}
   </main>
 </body>

@@ -1,14 +1,14 @@
 <div id="review-panel" class="space-y-6">
   {% set o = lead.outreach %}
   {% if lead.status != 'done' or not o %}
-    <div class="card p-6 text-center text-slate-400">
+    <div class="card p-8 text-center text-muted">
       {% if lead.status == 'failed' %}
-        <p class="text-rose-400">Processing failed.</p>
+        <p class="text-rose-600 font-medium">Processing failed.</p>
         <p class="text-xs mt-2">{{ lead.error }}</p>
       {% else %}
         <p>Outreach not generated yet ({{ lead.status }}).</p>
       {% endif %}
-      <button class="mt-4 bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm"
+      <button class="btn mt-5"
               hx-post="/leads/{{ lead.id }}/regenerate"
               hx-target="#review-panel" hx-swap="outerHTML"
               hx-indicator="#regen-spin">
@@ -19,56 +19,53 @@
     <!-- quality score -->
     <div class="card p-6 flex items-center justify-between">
       <div>
-        <div class="text-xs text-slate-400 uppercase tracking-wide">Quality score</div>
-        <div class="text-4xl font-bold {{ 'text-emerald-400' if o.quality_score>=8 else 'text-amber-400' }}">
-          {{ '%.1f'|format(o.quality_score or 0) }}<span class="text-lg text-slate-500">/10</span>
+        <div class="text-xs text-muted uppercase tracking-wider">Quality score</div>
+        <div class="font-display text-4xl font-semibold mt-1 {{ 'text-accent' if o.quality_score>=8 else '' }}"
+             {% if o.quality_score < 8 %}style="color:#a25b16"{% endif %}>
+          {{ '%.1f'|format(o.quality_score or 0) }}<span class="text-lg text-faint font-sans">/10</span>
         </div>
       </div>
-      <div>
-        <span class="text-xs px-2 py-1 rounded
-          {% if o.review_status=='approved' %}bg-emerald-900 text-emerald-300
-          {% elif o.review_status=='edited' %}bg-sky-900 text-sky-300
-          {% else %}bg-slate-700 text-slate-300{% endif %}">{{ o.review_status }}</span>
-      </div>
+      <span class="badge
+        {% if o.review_status=='approved' %}badge-green
+        {% elif o.review_status=='edited' %}badge-sky
+        {% else %}badge-gray{% endif %}">{{ o.review_status }}</span>
     </div>
 
     {% if o.qa_feedback %}
-    <div class="card p-4 text-xs text-slate-400">
+    <div class="card p-4 text-xs text-muted">
       <div class="flex flex-wrap gap-3 mb-2">
         {% for k in ['mentions_company','mentions_role','relevant','grammar_ok','professional_tone'] %}
         <span>{{ '✅' if o.qa_feedback.get(k) else '❌' }} {{ k.replace('_',' ') }}</span>
         {% endfor %}
         <span>{{ '⚠️ generic' if o.qa_feedback.get('generic') else '✅ specific' }}</span>
       </div>
-      <p class="text-slate-300">{{ o.qa_feedback.get('feedback','') }}</p>
+      <p class="text-ink/80">{{ o.qa_feedback.get('feedback','') }}</p>
     </div>
     {% endif %}
 
     <!-- editable outreach -->
     <form class="card p-6 space-y-4" hx-post="/leads/{{ lead.id }}/edit"
           hx-target="#review-panel" hx-swap="outerHTML">
+      <h3 class="font-display text-lg font-semibold">Outreach draft</h3>
       <div>
-        <label class="text-xs text-slate-400">Email subject</label>
-        <input name="email_subject" value="{{ o.email_subject or '' }}"
-               class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">
+        <label class="text-xs font-medium text-muted">Email subject</label>
+        <input name="email_subject" value="{{ o.email_subject or '' }}" class="field mt-1.5">
       </div>
       <div>
-        <label class="text-xs text-slate-400">Email body</label>
-        <textarea name="email_body" rows="9"
-          class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">{{ o.email_body or '' }}</textarea>
+        <label class="text-xs font-medium text-muted">Email body</label>
+        <textarea name="email_body" rows="9" class="field mt-1.5 leading-relaxed">{{ o.email_body or '' }}</textarea>
       </div>
       <div>
-        <label class="text-xs text-slate-400">WhatsApp message</label>
-        <textarea name="whatsapp_body" rows="4"
-          class="w-full bg-[#0d1326] border border-slate-700 rounded-lg px-3 py-2 text-sm mt-1">{{ o.whatsapp_body or '' }}</textarea>
+        <label class="text-xs font-medium text-muted">WhatsApp message</label>
+        <textarea name="whatsapp_body" rows="4" class="field mt-1.5 leading-relaxed">{{ o.whatsapp_body or '' }}</textarea>
       </div>
-      <div class="flex gap-2">
-        <button class="bg-sky-700 hover:bg-sky-600 px-4 py-2 rounded-lg text-sm">Save edits</button>
-        <button type="button" class="bg-emerald-700 hover:bg-emerald-600 px-4 py-2 rounded-lg text-sm"
+      <div class="flex flex-wrap gap-2">
+        <button class="btn">Save edits</button>
+        <button type="button" class="btn btn-ghost"
                 hx-post="/leads/{{ lead.id }}/approve" hx-target="#review-panel" hx-swap="outerHTML">
           Approve
         </button>
-        <button type="button" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm"
+        <button type="button" class="btn btn-ghost"
                 hx-post="/leads/{{ lead.id }}/regenerate" hx-target="#review-panel" hx-swap="outerHTML"
                 hx-indicator="#regen-spin">
           Regenerate <span id="regen-spin" class="htmx-indicator">…</span>
@@ -79,27 +76,27 @@
     <!-- delivery -->
     {% set reviewed = o.review_status in ['approved','edited'] %}
     {% macro send_badge(status) %}
-      <span class="text-xs px-2 py-0.5 rounded
-        {% if status in ['sent','replied'] %}bg-emerald-900 text-emerald-300
-        {% elif status in ['failed','bounced'] %}bg-rose-900 text-rose-300
-        {% elif status=='suppressed' %}bg-amber-900 text-amber-300
-        {% elif status=='queued' %}bg-sky-900 text-sky-300
-        {% else %}bg-slate-700 text-slate-300{% endif %}">{{ status }}</span>
+      <span class="badge
+        {% if status in ['sent','replied'] %}badge-green
+        {% elif status in ['failed','bounced'] %}badge-rose
+        {% elif status=='suppressed' %}badge-amber
+        {% elif status=='queued' %}badge-sky
+        {% else %}badge-gray{% endif %}">{{ status }}</span>
     {% endmacro %}
     <div class="card p-6 space-y-4">
-      <h3 class="text-sm font-semibold text-slate-300">Delivery</h3>
+      <h3 class="font-display text-lg font-semibold">Delivery</h3>
       {% if not reviewed %}
-      <p class="text-xs text-amber-400">Approve (or save edits to) the draft to enable sending.</p>
+      <p class="text-xs" style="color:#a25b16">Approve (or save edits to) the draft to enable sending.</p>
       {% endif %}
 
       <!-- email -->
       <div class="flex items-center justify-between gap-3">
-        <div class="text-sm">
-          <span class="text-slate-400">Email</span>
-          <span class="text-slate-500">{{ lead.email or 'no address' }}</span>
+        <div class="text-sm flex items-center gap-2">
+          <span class="text-muted">Email</span>
+          <span class="text-faint">{{ lead.email or 'no address' }}</span>
           {{ send_badge(o.send_status) }}
         </div>
-        <button class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm"
+        <button class="btn"
                 {% if not reviewed or not lead.email or o.send_status=='sent' %}disabled{% endif %}
                 hx-post="/leads/{{ lead.id }}/send" hx-target="#review-panel" hx-swap="outerHTML"
                 hx-indicator="#send-spin">
@@ -107,25 +104,25 @@
           <span id="send-spin" class="htmx-indicator">…</span>
         </button>
       </div>
-      {% if o.send_error %}<p class="text-xs text-rose-400">{{ o.send_error }}</p>{% endif %}
+      {% if o.send_error %}<p class="text-xs text-rose-600">{{ o.send_error }}</p>{% endif %}
       {% if o.send_status=='sent' and o.provider_message_id %}
-      <p class="text-xs text-slate-500">id: {{ o.provider_message_id }}</p>
+      <p class="text-xs text-faint font-mono">id: {{ o.provider_message_id }}</p>
       {% endif %}
 
       <!-- whatsapp -->
-      <div class="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
-        <div class="text-sm">
-          <span class="text-slate-400">WhatsApp</span>
-          <span class="text-slate-500">{{ lead.phone or 'no number' }}</span>
+      <div class="flex items-center justify-between gap-3 pt-3 border-t border-line">
+        <div class="text-sm flex items-center gap-2 flex-wrap">
+          <span class="text-muted">WhatsApp</span>
+          <span class="text-faint">{{ lead.phone or 'no number' }}</span>
           {{ send_badge(o.wa_send_status) }}
-          {% if lead.opt_in %}<span class="text-xs px-2 py-0.5 rounded bg-emerald-900 text-emerald-300">opted-in</span>{% endif %}
+          {% if lead.opt_in %}<span class="badge badge-green">opted-in</span>{% endif %}
         </div>
         <div class="flex gap-2">
-          <button type="button" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-xs"
+          <button type="button" class="btn btn-sm btn-ghost"
                   hx-post="/leads/{{ lead.id }}/opt-in" hx-target="#review-panel" hx-swap="outerHTML">
             {{ 'Revoke opt-in' if lead.opt_in else 'Mark opted-in' }}
           </button>
-          <button class="bg-green-700 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm"
+          <button class="btn btn-sm"
                   {% if not reviewed or not lead.phone or o.wa_send_status=='sent' or (settings.require_opt_in_for_whatsapp and not lead.opt_in) %}disabled{% endif %}
                   hx-post="/leads/{{ lead.id }}/send-whatsapp" hx-target="#review-panel" hx-swap="outerHTML"
                   hx-indicator="#wa-spin">
@@ -134,9 +131,9 @@
           </button>
         </div>
       </div>
-      {% if o.wa_send_error %}<p class="text-xs text-rose-400">{{ o.wa_send_error }}</p>{% endif %}
+      {% if o.wa_send_error %}<p class="text-xs text-rose-600">{{ o.wa_send_error }}</p>{% endif %}
       {% if settings.require_opt_in_for_whatsapp and not lead.opt_in %}
-      <p class="text-xs text-slate-500">WhatsApp needs opt-in consent before first contact (Meta policy).</p>
+      <p class="text-xs text-faint">WhatsApp needs opt-in consent before first contact (Meta policy).</p>
       {% endif %}
     </div>
 
@@ -144,48 +141,48 @@
     {% set e = lead.enrollment %}
     <div class="card p-6 space-y-3">
       <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-slate-300">Follow-up sequence</h3>
+        <h3 class="font-display text-lg font-semibold">Follow-up sequence</h3>
         {% if e %}
-        <span class="text-xs px-2 py-0.5 rounded
-          {% if e.status=='active' %}bg-sky-900 text-sky-300
-          {% elif e.status=='completed' %}bg-emerald-900 text-emerald-300
-          {% else %}bg-slate-700 text-slate-300{% endif %}">
+        <span class="badge
+          {% if e.status=='active' %}badge-sky
+          {% elif e.status=='completed' %}badge-green
+          {% else %}badge-gray{% endif %}">
           {{ e.status }}{% if e.stop_reason %} · {{ e.stop_reason }}{% endif %}
         </span>
         {% else %}
-        <span class="text-xs text-slate-500">not enrolled</span>
+        <span class="text-xs text-faint">not enrolled</span>
         {% endif %}
       </div>
 
       {% if e %}
         {% set total = e.sequence.steps|length %}
-        <div class="text-xs text-slate-400">
+        <div class="text-xs text-muted">
           {{ e.current_step }}/{{ total }} follow-ups sent · {{ e.sequence.name }}
           {% if e.status=='active' and e.next_run_at %}
           <br>Next touch: {{ e.next_run_at.strftime('%Y-%m-%d %H:%M') }} UTC
           {% endif %}
         </div>
         {% if e.last_sent_at %}
-        <div class="text-xs text-slate-500 border-t border-slate-800 pt-2">
+        <div class="text-xs text-faint border-t border-line pt-2">
           Last sent ({{ e.last_channel }}): {{ (e.last_body or '')[:160] }}
         </div>
         {% endif %}
         <div class="flex gap-2">
           {% if e.status=='active' %}
-          <button class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-xs"
+          <button class="btn btn-sm btn-ghost"
                   hx-post="/leads/{{ lead.id }}/sequence/stop" hx-target="#review-panel" hx-swap="outerHTML">
             Stop sequence
           </button>
           {% else %}
-          <button class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-xs"
+          <button class="btn btn-sm"
                   hx-post="/leads/{{ lead.id }}/sequence/start" hx-target="#review-panel" hx-swap="outerHTML">
             Restart sequence
           </button>
           {% endif %}
         </div>
       {% else %}
-        <p class="text-xs text-slate-500">Auto-enrolls once the first message is sent — or start it now.</p>
-        <button class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg text-xs"
+        <p class="text-xs text-faint">Auto-enrolls once the first message is sent — or start it now.</p>
+        <button class="btn btn-sm"
                 hx-post="/leads/{{ lead.id }}/sequence/start" hx-target="#review-panel" hx-swap="outerHTML">
           Start sequence
         </button>
