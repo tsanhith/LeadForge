@@ -36,8 +36,14 @@ from app.scraping.fetcher import fetch_site
 logger = logging.getLogger("leadforge.pipeline")
 
 
-async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
-    """Run all agents for one lead. Commits progress as it goes."""
+async def process_lead(
+    session: AsyncSession, lead: Lead, company_profile: dict | None = None
+) -> Lead:
+    """Run all agents for one lead. Commits progress as it goes.
+
+    ``company_profile`` is the offering being pitched (the uploader's company). When omitted,
+    the agents fall back to the built-in default profile.
+    """
     lead.status = "processing"
     lead.error = None
     await session.commit()
@@ -60,7 +66,7 @@ async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
 
         # 3. Opportunity mapping (against OUR services).
         opportunity = await opportunity_mapping.map_opportunity(
-            company_research=company, role_profile=role
+            company_research=company, role_profile=role, company_profile=company_profile
         )
         lead.opportunity = opportunity.model_dump()
         await session.commit()
@@ -84,6 +90,7 @@ async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
             role_profile=role,
             opportunity=opportunity,
             personalization=personalization,
+            company_profile=company_profile,
         )
 
         # 6. WhatsApp generation.
@@ -92,6 +99,7 @@ async def process_lead(session: AsyncSession, lead: Lead) -> Lead:
             company_research=company,
             opportunity=opportunity,
             personalization=personalization,
+            company_profile=company_profile,
         )
 
         # 7. QA review (second model).

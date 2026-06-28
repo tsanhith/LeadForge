@@ -26,16 +26,19 @@ async def _next_job_id(session: AsyncSession) -> str:
     return f"{today}-{count + 1:03d}"
 
 
-async def create_job(session: AsyncSession, *, file_path: str, filename: str) -> Job:
+async def create_job(
+    session: AsyncSession, *, file_path: str, filename: str, user_id: int | None = None
+) -> Job:
     """Parse the file, validate rows, persist a Job and its valid Leads.
 
     Invalid rows (no identity / duplicates) are counted but not queued for processing.
+    ``user_id`` ties the job to its uploader so the pipeline pitches that user's company.
     """
     rows = parse_file(file_path)
     validated = validate_rows(rows)
 
     job_id = await _next_job_id(session)
-    job = Job(id=job_id, source_filename=filename, status="processing")
+    job = Job(id=job_id, source_filename=filename, status="processing", user_id=user_id)
 
     valid_count = 0
     invalid_count = 0

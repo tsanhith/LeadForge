@@ -151,7 +151,33 @@ COMPANY_PROFILE: dict[str, object] = {
         "Faster operations through automation",
         "Bespoke AI — not off-the-shelf templates",
     ],
+    "sender_name": "",   # who the message is signed from; blank -> "the team"
+    "website": "",
 }
+
+# The fields a user fills in for their own company (the per-user profile stored on User).
+COMPANY_PROFILE_KEYS: tuple[str, ...] = (
+    "name", "one_liner", "services", "value_props", "sender_name", "website",
+)
+
+
+def merge_company_profile(profile: dict | None) -> dict:
+    """Resolve the company profile used for generation.
+
+    Once a user has set their own company (``name`` present), it fully replaces the built-in
+    default so no LeadForge boilerplate leaks into their outreach. Otherwise the default
+    profile is used (e.g. existing jobs uploaded before profiles existed, or unconfigured users).
+    """
+    if profile and profile.get("name"):
+        return {
+            "name": profile.get("name") or "",
+            "one_liner": profile.get("one_liner") or "",
+            "services": list(profile.get("services") or []),
+            "value_props": list(profile.get("value_props") or []),
+            "sender_name": profile.get("sender_name") or "",
+            "website": profile.get("website") or "",
+        }
+    return dict(COMPANY_PROFILE)
 
 
 # --------------------------------------------------------------------------------------

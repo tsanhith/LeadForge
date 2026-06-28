@@ -61,6 +61,14 @@
       Send approved · WhatsApp
     </button>
 
+    <span class="text-line">|</span>
+    <button class="btn btn-sm btn-ghost"
+            hx-post="/jobs/{{ job.id }}/regenerate"
+            hx-target="#job-body" hx-swap="outerHTML"
+            hx-confirm="Regenerate every lead in this job against your current company profile? This re-runs the AI pipeline.">
+      Regenerate all · your company
+    </button>
+
     {% if queued_count|default(0) %}
     <span class="ml-auto badge badge-sky">
       {{ queued_count }} queued · sending ~{{ settings.send_rate_per_hour }}/hr

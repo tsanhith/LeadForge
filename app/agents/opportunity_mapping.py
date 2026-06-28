@@ -8,22 +8,29 @@ from __future__ import annotations
 import json
 
 from app.agents.base import run_json_agent
-from app.config import COMPANY_PROFILE
+from app.config import merge_company_profile
 from app.schemas import CompanyResearch, Opportunity, RoleProfile
 
-_SYSTEM = (
-    "You are a B2B sales strategist for the company described below. Given a prospect's "
-    "company profile and role analysis, identify the single most relevant reason this "
-    "prospect would benefit from our services. Be specific and grounded; avoid generic "
-    "claims. Respond ONLY with a JSON object.\n\n"
-    f"OUR COMPANY:\n{json.dumps(COMPANY_PROFILE, indent=2)}"
-)
+
+def _system(company_profile: dict | None) -> str:
+    profile = merge_company_profile(company_profile)
+    return (
+        "You are a B2B sales strategist for the company described below. Given a prospect's "
+        "company profile and role analysis, identify the single most relevant reason this "
+        "prospect would benefit from our services. Be specific and grounded; avoid generic "
+        "claims. Respond ONLY with a JSON object.\n\n"
+        f"OUR COMPANY:\n{json.dumps(profile, indent=2)}"
+    )
+
 
 _SCHEMA_HINT = '{"outreach_angle": str, "rationale": str, "relevant_services": [str]}'
 
 
 async def map_opportunity(
-    *, company_research: CompanyResearch, role_profile: RoleProfile
+    *,
+    company_research: CompanyResearch,
+    role_profile: RoleProfile,
+    company_profile: dict | None = None,
 ) -> Opportunity:
     user = (
         "PROSPECT COMPANY:\n"
@@ -42,7 +49,7 @@ async def map_opportunity(
     )
     return await run_json_agent(
         task="opportunity",
-        system=_SYSTEM,
+        system=_system(company_profile),
         user=user,
         schema=Opportunity,
         temperature=0.5,

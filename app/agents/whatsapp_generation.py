@@ -4,16 +4,20 @@ from __future__ import annotations
 import json
 
 from app.agents.base import run_json_agent
-from app.config import COMPANY_PROFILE
+from app.config import merge_company_profile
 from app.schemas import CompanyResearch, Opportunity, Personalization, WhatsAppContent
 
-_SYSTEM = (
-    "You write short, friendly, professional WhatsApp outreach on behalf of the company "
-    "below. Conversational tone, 40-70 words, no emojis overload (at most one), no links, "
-    "reference the prospect's company naturally, end with a light question. Respond ONLY "
-    "with JSON.\n\n"
-    f"OUR COMPANY:\n{json.dumps(COMPANY_PROFILE, indent=2)}"
-)
+
+def _system(company_profile: dict | None) -> str:
+    profile = merge_company_profile(company_profile)
+    return (
+        "You write short, friendly, professional WhatsApp outreach on behalf of the company "
+        "below. Conversational tone, 40-70 words, no emojis overload (at most one), no links, "
+        "reference the prospect's company naturally, end with a light question. Respond ONLY "
+        "with JSON.\n\n"
+        f"OUR COMPANY:\n{json.dumps(profile, indent=2)}"
+    )
+
 
 _SCHEMA_HINT = '{"message": str}'
 
@@ -24,6 +28,7 @@ async def generate_whatsapp(
     company_research: CompanyResearch,
     opportunity: Opportunity,
     personalization: Personalization,
+    company_profile: dict | None = None,
 ) -> WhatsAppContent:
     user = (
         f"Recipient first name: {(name or 'there').split()[0]}\n"
@@ -35,7 +40,7 @@ async def generate_whatsapp(
     )
     return await run_json_agent(
         task="whatsapp",
-        system=_SYSTEM,
+        system=_system(company_profile),
         user=user,
         schema=WhatsAppContent,
         temperature=0.7,

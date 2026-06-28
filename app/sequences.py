@@ -26,7 +26,7 @@ from app.channels import email as email_channel
 from app.channels import suppression
 from app.channels import whatsapp as whatsapp_channel
 from app.config import get_settings
-from app.models import Enrollment, Lead, Sequence, SequenceStep
+from app.models import Enrollment, Job, Lead, Sequence, SequenceStep, User
 
 logger = logging.getLogger("leadforge.sequences")
 
@@ -138,7 +138,9 @@ def _stop(enr: Enrollment, reason: str) -> None:
 
 
 # ------------------------------------------------------------------ stepping
-async def _compose(step: SequenceStep, lead: Lead, follow_up_number: int) -> tuple[str | None, str]:
+async def _compose(
+    step: SequenceStep, lead: Lead, follow_up_number: int, company_profile: dict | None = None
+) -> tuple[str | None, str]:
     """Produce (subject, body) for a step — generated if asked, else the template."""
     subject = render_template(step.subject_template, lead) if step.subject_template else None
     body = render_template(step.body_template, lead)
@@ -158,6 +160,7 @@ async def _compose(step: SequenceStep, lead: Lead, follow_up_number: int) -> tup
                 original_subject=o.email_subject if o else None,
                 original_body=(o.email_body or o.whatsapp_body) if o else None,
                 outreach_angle=angle,
+                company_profile=company_profile,
             )
             if fc.message.strip():
                 body = fc.message.strip()
@@ -169,7 +172,12 @@ async def _compose(step: SequenceStep, lead: Lead, follow_up_number: int) -> tup
 
 
 async def _deliver_step(
-    session: AsyncSession, lead: Lead, step: SequenceStep, enr: Enrollment, now: datetime
+    session: AsyncSession,
+    lead: Lead,
+    step: SequenceStep,
+    enr: Enrollment,
+    now: datetime,
+    company_profile: dict | None = None,
 ) -> bool:
     """Send one step. Returns True if a message actually went out."""
     s = get_settings()
@@ -178,7 +186,7 @@ async def _deliver_step(
     if step.channel == "email":
         if not lead.email or _BLOCKING_EMAIL_FLAGS.intersection(lead.validation_flags or []):
             return False
-        subject, body = await _compose(step, lead, enr.current_step + 1)
+        subject, body = await _compose(step, lead, enr.current_step + 1, company_profile)
         result = await email_channel.send_email(lead.email, subject or "", body)
         if o:
             if result.ok:
@@ -195,7 +203,7 @@ async def _deliver_step(
     # whatsapp
     if not lead.phone or (s.require_opt_in_for_whatsapp and not lead.opt_in):
         return False
-    _, body = await _compose(step, lead, enr.current_step + 1)
+    _, body = await _compose(step, lead, enr.current_step + 1, company_profile)
     result = await whatsapp_channel.send_whatsapp(lead.phone, body)
     if o:
         if result.ok:
@@ -208,6 +216,15 @@ async def _deliver_step(
             o.wa_send_error = result.error
     _snapshot(enr, "whatsapp", None, body, now)
     return result.ok
+
+
+async def _lead_company_profile(session: AsyncSession, lead: Lead) -> dict | None:
+    """The offering this lead's follow-ups should pitch: the uploading user's company."""
+    job = await session.get(Job, lead.job_id)
+    if job is None or job.user_id is None:
+        return None
+    user = await session.get(User, job.user_id)
+    return user.company_profile if user else None
 
 
 def _snapshot(enr: Enrollment, channel: str, subject: str | None, body: str, now: datetime) -> None:
@@ -247,7 +264,8 @@ async def process_enrollment_step(
         return "stopped"
 
     step = steps[enr.current_step]
-    sent = await _deliver_step(session, lead, step, enr, now)
+    company_profile = await _lead_company_profile(session, lead)
+    sent = await _deliver_step(session, lead, step, enr, now, company_profile)
 
     enr.current_step += 1
     if enr.current_step >= len(steps):
