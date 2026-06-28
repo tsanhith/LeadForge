@@ -14,7 +14,8 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import Job, Lead, User
+from app.job_service import company_profile_for_job
+from app.models import Job, Lead
 from app.pipeline.orchestrator import process_lead
 
 logger = logging.getLogger("leadforge.worker")
@@ -55,7 +56,7 @@ async def _process_job(job_id: str) -> None:
                 select(Lead.id).where(Lead.job_id == job_id, Lead.status == "pending")
             )
         ).scalars().all()
-        company_profile = await _job_company_profile(session, job_id)
+        company_profile = await company_profile_for_job(session, job_id)
 
     logger.info("job %s: processing %d leads", job_id, len(lead_ids))
 
@@ -72,15 +73,6 @@ async def _process_job(job_id: str) -> None:
 
     await asyncio.gather(*(worker(lid) for lid in lead_ids))
     await _finalize_job(job_id)
-
-
-async def _job_company_profile(session, job_id: str) -> dict | None:
-    """The company profile to pitch for this job: its uploader's. None -> built-in default."""
-    job = await session.get(Job, job_id)
-    if job is None or job.user_id is None:
-        return None
-    user = await session.get(User, job.user_id)
-    return user.company_profile if user else None
 
 
 async def _bump_counts(job_id: str) -> None:

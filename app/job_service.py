@@ -8,12 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingest.excel import parse_file
 from app.ingest.validator import validate_rows
-from app.models import Job, Lead
+from app.models import Job, Lead, User
 
 _LEAD_FIELDS = (
     "name", "position", "company", "website", "linkedin",
     "industry", "email", "phone", "description",
 )
+
+
+async def company_profile_for_job(session: AsyncSession, job_id: str) -> dict | None:
+    """The company profile a job's outreach should pitch: its uploader's.
+
+    Returns ``None`` for jobs with no uploader (e.g. pre-dating profiles), which the agents
+    resolve to the built-in default via :func:`app.config.merge_company_profile`.
+    """
+    job = await session.get(Job, job_id)
+    if job is None or job.user_id is None:
+        return None
+    user = await session.get(User, job.user_id)
+    return user.company_profile if user else None
 
 
 async def _next_job_id(session: AsyncSession) -> str:

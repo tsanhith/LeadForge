@@ -26,7 +26,8 @@ from app.channels import email as email_channel
 from app.channels import suppression
 from app.channels import whatsapp as whatsapp_channel
 from app.config import get_settings
-from app.models import Enrollment, Job, Lead, Sequence, SequenceStep, User
+from app.job_service import company_profile_for_job
+from app.models import Enrollment, Lead, Sequence, SequenceStep
 
 logger = logging.getLogger("leadforge.sequences")
 
@@ -218,15 +219,6 @@ async def _deliver_step(
     return result.ok
 
 
-async def _lead_company_profile(session: AsyncSession, lead: Lead) -> dict | None:
-    """The offering this lead's follow-ups should pitch: the uploading user's company."""
-    job = await session.get(Job, lead.job_id)
-    if job is None or job.user_id is None:
-        return None
-    user = await session.get(User, job.user_id)
-    return user.company_profile if user else None
-
-
 def _snapshot(enr: Enrollment, channel: str, subject: str | None, body: str, now: datetime) -> None:
     enr.last_sent_at = now
     enr.last_channel = channel
@@ -264,7 +256,7 @@ async def process_enrollment_step(
         return "stopped"
 
     step = steps[enr.current_step]
-    company_profile = await _lead_company_profile(session, lead)
+    company_profile = await company_profile_for_job(session, lead.job_id)
     sent = await _deliver_step(session, lead, step, enr, now, company_profile)
 
     enr.current_step += 1

@@ -155,12 +155,6 @@ COMPANY_PROFILE: dict[str, object] = {
     "website": "",
 }
 
-# The fields a user fills in for their own company (the per-user profile stored on User).
-COMPANY_PROFILE_KEYS: tuple[str, ...] = (
-    "name", "one_liner", "services", "value_props", "sender_name", "website",
-)
-
-
 def merge_company_profile(profile: dict | None) -> dict:
     """Resolve the company profile used for generation.
 

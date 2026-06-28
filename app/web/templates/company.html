@@ -39,14 +39,14 @@
   <div>
     <label class="text-xs font-medium text-muted">Services / offerings</label>
     <textarea name="services" rows="4" class="field mt-1.5"
-              placeholder="One per line, e.g.&#10;{{ default.services|join('&#10;') }}">{{ profile.get('services', [])|join('\n') }}</textarea>
+              placeholder="One per line, e.g.&#10;{{ default.services|join('\n') }}">{{ profile.get('services', [])|join('\n') }}</textarea>
     <p class="text-xs text-faint mt-1">One per line. The opportunity agent matches these to each lead's needs.</p>
   </div>
 
   <div>
     <label class="text-xs font-medium text-muted">Value propositions</label>
     <textarea name="value_props" rows="3" class="field mt-1.5"
-              placeholder="One per line, e.g.&#10;{{ default.value_props|join('&#10;') }}">{{ profile.get('value_props', [])|join('\n') }}</textarea>
+              placeholder="One per line, e.g.&#10;{{ default.value_props|join('\n') }}">{{ profile.get('value_props', [])|join('\n') }}</textarea>
     <p class="text-xs text-faint mt-1">One per line. The concrete outcomes you deliver.</p>
   </div>
 

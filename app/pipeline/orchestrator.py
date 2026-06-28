@@ -133,11 +133,21 @@ async def _save_outreach(
     qa,
 ) -> None:
     outreach = lead.outreach or Outreach(lead_id=lead.id)
+    regenerated = outreach.id is not None  # reusing an existing row => this is a re-generation
     outreach.email_subject = email.subject
     outreach.email_body = email.body
     outreach.whatsapp_body = whatsapp.message
     outreach.quality_score = qa.quality_score
     outreach.qa_feedback = qa.model_dump()
+    if regenerated:
+        # The copy is new, so any prior approval/send applied to *old* text. Reset to a clean
+        # draft (needs re-review, not yet sent) so the UI and send guards don't mislabel it.
+        outreach.review_status = "pending"
+        outreach.send_status = "draft"
+        outreach.wa_send_status = "draft"
+        outreach.sent_at = outreach.wa_sent_at = None
+        outreach.provider_message_id = outreach.wa_provider_message_id = None
+        outreach.send_error = outreach.wa_send_error = None
     if outreach.id is None:
         session.add(outreach)
     lead.outreach = outreach

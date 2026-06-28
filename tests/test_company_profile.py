@@ -54,7 +54,7 @@ async def session():
 
 
 async def test_job_company_profile_follows_uploader(session: AsyncSession):
-    from app.pipeline.worker import _job_company_profile
+    from app.job_service import company_profile_for_job
 
     user = User(email="ops@acme.example", password_hash="x", role="member",
                 company_profile={"name": "Acme", "services": ["arms"]})
@@ -65,11 +65,47 @@ async def test_job_company_profile_follows_uploader(session: AsyncSession):
     session.add(job)
     await session.commit()
 
-    profile = await _job_company_profile(session, job.id)
+    profile = await company_profile_for_job(session, job.id)
     assert profile == {"name": "Acme", "services": ["arms"]}
 
     # a job with no uploader falls back to the default (None -> default in agents)
     orphan = Job(id="2026-01-01-002", source_filename="f.csv", status="processing")
     session.add(orphan)
     await session.commit()
-    assert await _job_company_profile(session, orphan.id) is None
+    assert await company_profile_for_job(session, orphan.id) is None
+
+
+async def test_regenerate_resets_review_and_send_state(session: AsyncSession):
+    """A re-generation must clear stale approved/sent state so new copy isn't mislabeled."""
+    from types import SimpleNamespace
+
+    from app.models import Lead, Outreach
+    from app.pipeline.orchestrator import _save_outreach
+
+    job = Job(id="2026-01-02-001", source_filename="f.csv", status="done")
+    session.add(job)
+    await session.commit()
+    lead = Lead(job_id=job.id, name="Dana", status="done")
+    session.add(lead)
+    await session.commit()
+
+    # Pre-existing outreach that was approved + already sent on both channels.
+    o = Outreach(
+        lead_id=lead.id, email_subject="old", email_body="old", whatsapp_body="old",
+        review_status="approved", send_status="sent", wa_send_status="sent",
+        provider_message_id="abc", wa_provider_message_id="xyz",
+    )
+    session.add(o)
+    await session.commit()
+    lead.outreach = o
+
+    email = SimpleNamespace(subject="new subject", body="new body")
+    whatsapp = SimpleNamespace(message="new wa")
+    qa = SimpleNamespace(quality_score=9.0, model_dump=lambda: {"feedback": "ok"})
+    await _save_outreach(session, lead, email, whatsapp, qa)
+    await session.commit()
+
+    assert o.email_subject == "new subject"           # new copy written
+    assert o.review_status == "pending"               # needs re-review
+    assert o.send_status == "draft" and o.wa_send_status == "draft"
+    assert o.provider_message_id is None and o.wa_provider_message_id is None
